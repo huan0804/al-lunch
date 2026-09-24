@@ -647,24 +647,33 @@ function shareMsg(){
   const s=S.session; if(!s) return shareLink();
   return `🍱 ${hostName()} mời đặt cơm trưa ${fmtDate(s.date)}${s.shopName?` (${s.shopName})`:""}.\nChốt đơn lúc ${hhmm(deadlineAt(s))}. Vào chọn món tại:\n${shareLink()}`;
 }
-function canNativeShare(){
-  if (!navigator.share) return false;
-  try{ const fp=document.permissionsPolicy||document.featurePolicy; if (fp?.allowsFeature) return fp.allowsFeature("web-share"); }catch{}
-  return true;
-}
+// permissionsPolicy/featurePolicy.allowsFeature("web-share") cho false
+// negative trên nhiều Android Chrome (feature không được liệt kê trong
+// policy mặc định dù navigator.share() thực sự dùng được) — không dùng
+// để quyết định, chỉ cần navigator.share tồn tại là đủ; nếu gọi thất bại
+// thật, promise của nó tự reject và có xử lý riêng ở nơi gọi.
+function canNativeShare(){ return !!navigator.share; }
 function shareSheet(){
   const link=shareLink(), msg=shareMsg();
   const app=(key,label,bg,ic)=>`<button data-a="share-app" data-v="${key}"><span class="ic" style="background:${bg}">${ic}</span>${label}</button>`;
+  // navigator.share() chỉ mở ĐƯỢC MỘT hộp thoại — không có tham số nào để
+  // "mở thẳng app X"; app nào được dùng là do người dùng tự chọn trong đó.
+  // Vậy trên máy có navigator.share (hầu hết mobile), 3 nút Zalo/Teams/
+  // Facebook sẽ dẫn tới cùng 1 hộp thoại y hệt nhau — gộp lại thành 1 nút
+  // "Chia sẻ" để không tạo cảm giác có 3 lối đi khác nhau khi thực ra chỉ
+  // có 1. Trên máy không có navigator.share (desktop), giữ 3 nút mở web
+  // riêng của từng app như cũ, vì ở đó chúng THỰC SỰ khác nhau.
+  const mobileShare = canNativeShare();
+  const quickButtons = mobileShare
+    ? `<button data-a="share-app" data-v="native"><span class="ic" style="background:#111">${I.share}</span>Chia sẻ (chọn Zalo, Facebook…)</button>`
+    : `${app("zalo","Zalo","#0068FF","Zalo")}${app("teams","Teams","#5B5FC7","T")}${app("facebook","Facebook","#1877F2","f")}<button data-a="copy" data-t="${esc(link)}"><span class="ic" style="background:#F7941D;color:#111">${I.link}</span>Chỉ copy link</button>`;
   return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Mời thành viên">
     <div class="grab"></div><div class="between"><h3>Mời thành viên</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
     <div class="muted small">Copy tin nhắn mời rồi dán vào nhóm chat của team</div>
     <div class="msgbox" style="margin-top:14px">${esc(msg)}</div>
     <button class="cta" data-a="copy-invite" style="margin-top:12px">${I.link} Copy tin nhắn mời</button>
     <div class="req" style="margin-top:20px"><b>Hoặc copy và mở nhanh</b></div>
-    <div class="share-grid">
-      ${app("zalo","Zalo","#0068FF","Zalo")}${app("teams","Teams","#5B5FC7","T")}${app("facebook","Facebook","#1877F2","f")}
-      ${canNativeShare()?app("native","Khác","#111",I.share):`<button data-a="copy" data-t="${esc(link)}"><span class="ic" style="background:#F7941D;color:#111">${I.link}</span>Chỉ copy link</button>`}
-    </div>
+    <div class="share-grid">${quickButtons}</div>
     <p class="small muted">Ai có link đều mở được, không cần tài khoản.</p>
   </div>`;
 }
@@ -780,13 +789,21 @@ function hostSummary(){
   const totalSets=list.reduce((a,o)=>a+setsCount(o),0), totalMoney=list.reduce((a,o)=>a+o.total,0);
   const portions={}, doubles={}, notes=[];
   list.forEach(o=>o.sets.forEach(st=>{ const q=qtyOf(st); st.dishes.forEach(d=>portions[d.name]=(portions[d.name]||0)+d.portions*q); if(st.dishes.length===1) doubles[st.dishes[0].name]=(doubles[st.dishes[0].name]||0)+q; if(st.note) notes.push(`${st.for||o.name} (${q>1?q+"x ":""}${setLabel(st)}): ${st.note}`); }));
-  const people=[]; list.forEach(o=>groupSets(o).forEach(g=>people.push(`- ${g.who}${g.self?"":` (${o.name} đặt hộ)`}: ${g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [${st.note}]`:"")).join("; ")}`)));
+  // people: dữ liệu thô (không phải string đã ghép) để vừa build text
+  // copy vừa render thành 1 danh sách HTML liền mạch khi đơn đã khoá — xem
+  // khối "closedList" bên dưới, thay cho việc phải cuộn qua nhiều card
+  // "Giỏ hàng của bạn" / "Thành viên đã đặt" tách rời nhau.
+  const people=[]; list.forEach(o=>groupSets(o).forEach(g=>people.push({
+    who:g.who, byWhom: g.self?null:o.name,
+    line: g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [${st.note}]`:"")).join("; ")
+  })));
+  const peopleText = people.map(p=>`- ${p.who}${p.byWhom?` (${p.byWhom} đặt hộ)`:""}: ${p.line}`);
   const rows=Object.entries(portions).sort((a,b)=>b[1]-a[1]);
   // Copy gửi quán chỉ liệt kê THEO NGƯỜI (ai đặt gì) — bỏ phần tổng hợp
   // theo món (rows) khỏi text copy theo yêu cầu; rows vẫn dùng để hiển thị
   // trong khối "Tổng món gửi quán" trên UI bên dưới (details/summary), chỉ
   // không đưa vào nội dung copy nữa.
-  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n\nTheo người (${people.length} người):\n`+people.join("\n")+(notes.length?`\n\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"");
+  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n\nTheo người (${peopleText.length} người):\n`+peopleText.join("\n")+(notes.length?`\n\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"");
   const rec=list.filter(o=>o.payMethod!=="host"&&o.payStatus==="confirmed"), cash=list.filter(o=>o.payMethod==="cash"&&o.payStatus!=="confirmed"), tf=list.filter(o=>o.payMethod==="transfer"&&o.payStatus!=="confirmed");
   const sum=a=>a.reduce((x,o)=>x+o.total,0), unpaid=[...tf,...cash];
   const unpaidText=`Cơm ${fmtDate(s.date)}, còn chưa thanh toán:\n`+unpaid.map(o=>`- ${o.name}${o.guests?.length?` (gồm ${o.guests.join(", ")})`:""}: ${money(o.total)}${o.payMethod==="cash"?" (tiền mặt)":""}`).join("\n");
@@ -806,7 +823,14 @@ function hostSummary(){
       </div>
       ${closed?`<p class="small muted" style="margin:10px 0 0">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm "Mở để sửa" nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p>`:""}
       <p class="small muted" style="margin:10px 0 0">Đối chiếu app ngân hàng theo nội dung <b>${esc(transferInfo(s.date,"").trim())} TÊN</b>, rồi bấm xác nhận ở từng thành viên.</p>
-    </div></div>`;
+    </div>
+    ${closed && people.length ? `<div class="card" style="margin-top:12px">
+      <div class="between"><b style="font-size:17px">Danh sách gửi quán</b><button class="btn" data-a="copy" data-t="${esc(kitchen)}">${I.link} Copy</button></div>
+      <p class="small muted" style="margin:4px 0 10px">Cả trưởng nhóm và thành viên trong 1 danh sách — chụp màn hình hoặc copy gửi quán.</p>
+      ${people.map(p=>`<div class="line"><div class="d"><b style="font-weight:600">${esc(p.who)}${p.byWhom?` <span class="small muted">(${esc(p.byWhom)} đặt hộ)</span>`:""}</b><small>${esc(p.line)}</small></div></div>`).join("")}
+      ${notes.length?`<div class="band" style="margin:12px -20px"></div><b class="small">Ghi chú</b>${notes.map(x=>`<p class="small muted" style="margin:4px 0 0">${esc(x)}</p>`).join("")}`:""}
+    </div>`:""}
+    </div>`;
 }
 
 /* ---------- Create group (host) ---------- */
@@ -918,23 +942,19 @@ async function onClick(e){
     case "copy-invite": copyText(shareMsg(), "Đã copy tin nhắn mời, dán vào nhóm chat nhé"); return;
     case "share-app": {
       const link=shareLink(), msg=shareMsg(), enc=encodeURIComponent;
+      // "native": nút "Chia sẻ" duy nhất khi máy có navigator.share() — xem
+      // shareSheet(). Mở share sheet chuẩn của hệ điều hành; người dùng tự
+      // chọn Zalo/Facebook/… đã đăng nhập sẵn từ đó, kể cả chọn thẳng bạn/
+      // nhóm nếu app đó hỗ trợ (Zalo, Facebook đều hỗ trợ trên luồng share
+      // sheet chuẩn — không hỗ trợ khi bị ép mở qua Intent package cụ thể
+      // hoặc URL web sharer.php, đã xác nhận qua test).
       if (v==="native"){ try{ await navigator.share({title:"Cơm trưa team", text:msg}); }catch(err){ if(err?.name!=="AbortError") copyText(msg,"Không mở được bảng chia sẻ. Đã copy tin nhắn, hãy dán vào nhóm chat"); } return; }
+      // Các nhánh dưới đây CHỈ còn chạy trên máy KHÔNG có navigator.share
+      // (desktop) — ở đó 3 app thực sự khác nhau nên vẫn đáng để tách riêng.
       const names={zalo:"Zalo",teams:"Teams",facebook:"Facebook"};
       if (v==="zalo"){
-        const android=/Android/i.test(navigator.userAgent);
-        const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
-        // Android: package=com.zing.zalo ép mở thẳng Zalo qua Intent, nhưng Zalo
-        // không hiện màn chọn bạn/nhóm cho luồng đó (giới hạn của app Zalo, không
-        // sửa được từ code web). navigator.share() đi qua share sheet chuẩn của
-        // hệ điều hành — người dùng tự chọn Zalo từ đó, khả năng cao Zalo xử lý
-        // đúng luồng ACTION_SEND hơn. Không có API nào mở thẳng "màn chọn bạn của
-        // Zalo" mà bỏ qua share sheet hệ thống.
-        if (android && canNativeShare()){
-          try{ await navigator.share({title:"Cơm trưa team", text:msg}); return; }
-          catch(err){ if(err?.name==="AbortError") return; }
-        }
-        await copyText(msg, android ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : ios ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
-        if (!android && !ios){ try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{} }
+        await copyText(msg, "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
+        try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{}
         return;
       }
       await copyText(msg, `Đã copy tin nhắn. Mở ${names[v]} và dán vào nhóm`);
