@@ -900,7 +900,7 @@ function createView(){
       <details class="more" data-k="lib" ${S.open.lib!==false?"open":""}><summary><span>Chọn món đã từng có (${S.dishes.length})</span>${I.chev}</summary>
         ${last?.menu?.length?`<button class="btn" data-a="md-copy-last" style="margin-bottom:8px">Copy thực đơn lần trước${last.shopName?` (${esc(last.shopName)})`:""}</button>`:""}
         ${S.dishes.length?`<input type="search" id="lib-q" data-f="lib-q" value="${esc(S.libQ)}" placeholder="Tìm món…">
-        <div class="lib">${lib.map(d=>`<button class="opt" role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}"><span class="t"><b>${esc(d.nameVi)}</b><small>${d.nameEn?esc(d.nameEn)+", ":""}đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
+        <div class="lib">${lib.map(d=>`<div class="opt" style="display:flex;align-items:center;gap:8px"><button role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}" style="flex:1;display:flex;align-items:center;gap:14px;border:0;background:none;padding:0;cursor:pointer;text-align:left"><span class="t"><b>${esc(d.nameVi)}</b><small>${d.nameEn?esc(d.nameEn)+", ":""}đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button><button class="icon" data-a="lib-del" data-v="${esc(d.id)}" aria-label="Xoá ${esc(d.nameVi)} khỏi thư viện" title="Xoá khỏi thư viện" style="flex:none">${I.close}</button></div>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
       </details>
       <details class="more" data-k="text" ${S.open.text?"open":""}><summary><span>Dán text menu</span>${I.chev}</summary>
         <textarea id="md-text" data-f="md-text" placeholder="Mỗi dòng một món">${esc(md.text||"")}</textarea>
@@ -1056,6 +1056,11 @@ async function onClick(e){
     case "md-min": S.md.minutes=Math.max(5,Math.min(600,S.md.minutes+Number(v))); break;
     case "md-auto": S.md.autoClose=!S.md.autoClose; break;
     case "md-lib": { const d=S.dishes.find(x=>x.id===v), k=S.md.items.findIndex(x=>x.id===v); if(k>=0) S.md.items.splice(k,1); else if(d) S.md.items.push({id:d.id,nameVi:d.nameVi,nameEn:d.nameEn||"",soldOut:false}); break; }
+    case "lib-del": {
+      const d=S.dishes.find(x=>x.id===v); if(!d) return;
+      if (!(await ask(`Xoá "${d.nameVi}" khỏi thư viện món? Không ảnh hưởng thực đơn đang soạn.`, "Xoá", true))) return;
+      try{ await window.deleteDish(v); toast("Đã xoá khỏi thư viện"); }catch(err){ writeErr(err); }
+      break; }
     case "md-copy-last": { const last=lastMenuLocal(); let n=0; last?.menu?.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi,nameEn:x.nameEn||"",soldOut:false}); n++; } }); toast(`Đã thêm ${n} món`); break; }
     case "md-text-add": { let n=0; String(S.md.text||"").split(/\n/).map(l=>l.replace(/^[\s\-•*\d.)]+/,"").trim()).filter(Boolean).forEach(l=>{ if(addDraftItem(l)) n++; }); S.md.text=""; toast(`Đã thêm ${n} món`); break; }
     case "md-add-one": S.md.items.push({id:null,nameVi:"",nameEn:"",soldOut:false}); break;

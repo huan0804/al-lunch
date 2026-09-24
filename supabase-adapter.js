@@ -264,6 +264,10 @@
     if (error) throw error;
     return data;
   };
+  window.deleteDish = async (id) => {
+    const { error } = await sb.from("dishes").delete().eq("id", id);
+    if (error) throw error;
+  };
   window.SupabaseOrderToken = orderToken; // để index.html đọc lại nếu cần (vd ghép link)
   window.SupabaseManageToken = manageToken;
   window.SupabaseResolveManageAccess = resolveManageAccess; // PHẢI gọi (await) trong boot() TRƯỚC user.canEdit()/isOwner()
