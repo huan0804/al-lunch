@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cơm trưa team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#FFFFFF; --band:#FFFFFF; --surface:#FFFFFF; --ink:#111111; --muted:#6B6B6B; --line:#EAEAEA;
+  --brand:#F7941D; --brand-ink:#111111; --brand-soft:#FFF1E0; --brand-deep:#D97706;
+  --chili:#D32F2F; --chili-soft:#FDE7E7; --amber:#B45309; --amber-soft:#FDEBD3;
+  --ok:#2E7D32; --ok-soft:#E6F3E7; --gray-soft:#F0F0F0; --yel-soft:#FFF6CC;
+  --sel:#111111; --sel-ink:#FFFFFF;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{background:#FFFFFF}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.page{max-width:560px;margin:0 auto;min-height:100vh;background:var(--bg);padding-bottom:120px;position:relative}
+.pad{padding:0 20px}
+.band{height:1px;background:var(--line);margin:20px 0}
+.muted{color:var(--muted)} .small{font-size:14px} .err{color:var(--chili)}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+svg.i{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* top bar */
+.topbar{display:flex;align-items:center;gap:12px;padding:14px 16px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+.topbar .tt{flex:1;min-width:0}
+.topbar .tt b{display:block;font-size:19px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .tt small{color:var(--muted);font-size:14px}
+.icon{width:42px;height:42px;border-radius:50%;border:0;background:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.icon:hover{background:var(--gray-soft)}
+.icon.soft{background:var(--brand-soft);color:var(--brand-deep)}
+
+/* hero + shop card */
+.hero{display:flex;justify-content:flex-end;padding:14px 16px 0;min-height:14px}
+.hero .hbtn{display:flex;gap:8px}
+.hero .hbtn button{background:var(--surface);color:var(--ink);border:1.5px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.shop{margin:12px 16px 0;background:var(--surface);border:1.5px solid var(--line);border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.05);position:relative;overflow:hidden}
+.shop .grp{background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
+.shop .grp svg{color:var(--brand-deep)}
+.shop .body{padding:14px 16px 16px}
+.shop h1{margin:0 0 4px;font-size:26px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.shop .meta{font-size:15px;color:var(--muted);margin-top:2px}
+.shop .price{color:var(--brand-deep);font-weight:600}
+.pills{display:flex;flex-wrap:wrap;gap:10px;padding:14px 16px 0}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 16px;font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.pill.hl{border-color:var(--brand);color:var(--ink)}
+.pill:hover{border-color:var(--ink)}
+.dl{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.dl.closed{color:var(--chili)}
+
+/* menu list */
+h2.sec{font-size:21px;font-weight:800;margin:0 0 4px}
+.dish{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.dish:last-child{border-bottom:0}
+.dish .nm{flex:1;min-width:0}
+.dish .nm b{display:block;font-size:17px;font-weight:600}
+.dish .nm small{color:var(--muted);font-size:14px}
+.dish.out .nm{opacity:.45}
+.plus{width:40px;height:40px;border-radius:50%;background:var(--brand);color:var(--brand-ink);border:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;box-shadow:0 2px 6px rgba(247,148,29,.35)}
+.plus svg{stroke-width:2.6}
+.soldtag{font-size:13px;font-weight:600;color:var(--muted);background:var(--gray-soft);border-radius:999px;padding:4px 10px}
+
+/* bottom bar */
+.bottom{position:fixed;left:0;right:0;bottom:0;background:var(--bg);box-shadow:0 -4px 18px rgba(0,0,0,.06);border-radius:18px 18px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));z-index:20}
+.bottom .in{max-width:528px;margin:0 auto}
+.cta{width:100%;border:0;border-radius:999px;background:var(--brand);color:var(--brand-ink);font-weight:700;font-size:17px;padding:16px 20px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
+.cta.split{justify-content:space-between}
+.cta[disabled]{background:var(--gray-soft);color:var(--muted);cursor:not-allowed}
+.hint{text-align:center;font-size:13px;color:var(--chili);margin-top:8px}
+
+/* generic */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--ink)}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.dark{background:var(--sel);border-color:var(--sel);color:var(--sel-ink)}
+.btn.danger{color:var(--chili)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.link{border:0;background:none;color:var(--brand-deep);font-weight:700;font-size:16px;cursor:pointer;padding:4px 0}
+.link.red{color:var(--chili)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.between{display:flex;justify-content:space-between;align-items:center;gap:10px}
+label.f{display:block;font-weight:600;font-size:14px;margin:0 0 6px}
+input[type=text],input[type=number],input[type=search],select,textarea{width:100%;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 12px;font-size:16px;outline:none}
+textarea{min-height:80px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+.card{border:1.5px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px;background:var(--surface)}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--brand-soft);color:var(--brand-deep);display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:none;text-transform:uppercase}
+.mem-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.mem-head .nm{flex:1;min-width:0;font-weight:700;font-size:17px}
+.mem-head .nm input{font-weight:600}
+.line{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.line .q{font-weight:700;color:var(--brand-deep);min-width:26px}
+.line .d{flex:1;min-width:0}
+.line .d small{display:block;color:var(--muted);font-size:13px}
+.line .p{font-weight:600;text-align:right}
+.line .acts{display:flex;gap:10px;margin-top:4px}
+.line .acts button{border:0;background:none;padding:0;color:var(--brand-deep);font-weight:600;font-size:14px;cursor:pointer}
+.who{display:flex;justify-content:space-between;gap:10px;font-weight:700;font-size:15px;padding:12px 0 2px;border-top:1px solid var(--line);color:var(--brand-deep)}
+.gchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.gchips span{background:var(--brand-soft);border-radius:999px;padding:4px 12px;font-size:14px;font-weight:600}
+.ptabs{display:flex;gap:8px;overflow-x:auto;margin-top:14px;padding-bottom:2px}
+.ptabs button{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap}
+.ptabs button[aria-selected="true"]{background:var(--sel);border-color:var(--sel);color:var(--sel-ink)}
+.ptabs .ok{display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--brand);color:#111;align-items:center;justify-content:center}
+.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;white-space:nowrap}
+.b-red{background:var(--chili-soft);color:var(--chili)} .b-yel{background:var(--yel-soft);color:var(--ink)}
+.b-org{background:var(--amber-soft);color:var(--amber)} .b-grn{background:var(--ok-soft);color:var(--ok)} .b-gry{background:var(--gray-soft);color:var(--muted)}
+.opt{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;padding:14px 0;border-bottom:1px solid var(--line);cursor:pointer;text-align:left}
+.opt:last-child{border-bottom:0}
+.opt .t{flex:1}
+.opt .t b{display:block;font-weight:600}
+.opt .t small{color:var(--muted);font-size:13px}
+.radio,.cbox{width:22px;height:22px;border:2px solid #BDBDBD;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.radio{border-radius:50%}
+.cbox{border-radius:6px}
+[aria-checked="true"] .radio{border:7px solid var(--brand)}
+[aria-checked="true"] .cbox{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.opt[disabled]{opacity:.45;cursor:not-allowed}
+.setting{display:flex;gap:14px;align-items:flex-start;padding:16px 0}
+.setting .t{flex:1}
+.setting .t b{display:block;font-size:17px;font-weight:700}
+.setting .t small{display:block;color:var(--muted);font-size:14px;margin-top:2px}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper b{min-width:72px;text-align:center;font-size:17px}
+.toggle{width:52px;height:30px;border-radius:999px;background:#CFCFCF;border:0;position:relative;cursor:pointer;flex:none}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle[aria-checked="true"]{background:var(--brand)}
+.toggle[aria-checked="true"]::after{left:25px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:12px}
+.stat small{display:block;color:var(--muted);font-size:13px;font-weight:600}
+.stat b{font-size:20px;font-weight:800}
+.stat.g b{color:var(--ok)} .stat.o b{color:var(--amber)} .stat.r b{color:var(--chili)}
+.chipbar{display:flex;gap:8px;overflow-x:auto;margin:12px 0 6px}
+.chipbar button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.chipbar button[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:var(--sel-ink)}
+.qrbox{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.qr{background:#fff;border:1px solid var(--line);border-radius:14px;padding:6px;line-height:0}
+.qr svg{width:200px;height:200px;display:block}
+.kv{flex:1;min-width:220px}
+.kv div{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.kv div:last-child{border-bottom:0}
+.kv span{color:var(--muted);font-size:14px}
+.kv b{word-break:break-all;text-align:right;flex:1}
+.note{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
+.banner{background:var(--yel-soft);border-radius:12px;padding:10px 14px;margin:0 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drop{border:2px dashed #CFCFCF;border-radius:14px;padding:18px;text-align:center;background:var(--surface);cursor:pointer}
+.drop.over{border-color:var(--brand);background:var(--brand-soft)}
+.drop img{max-width:100%;max-height:160px;border-radius:8px;margin-top:10px}
+.lib{max-height:260px;overflow:auto;border:1.5px solid var(--line);border-radius:12px;margin-top:8px;padding:0 12px}
+.mrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.mrow:last-child{border-bottom:0}
+.mrow .en{grid-column:1/2}
+details.more summary{cursor:pointer;font-weight:600;padding:10px 0;list-style:none;display:flex;justify-content:space-between}
+details.more summary::-webkit-details-marker{display:none}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--bg);border-radius:22px 22px 0 0;max-height:88vh;overflow:auto;padding:8px 20px calc(20px + env(safe-area-inset-bottom,0px));max-width:560px;margin:0 auto}
+.sheet .grab{width:44px;height:5px;border-radius:9px;background:#D6D6D6;margin:6px auto 12px}
+.sheet h3{font-size:21px;margin:0 0 2px;font-weight:800}
+.sheet .req{display:flex;justify-content:space-between;align-items:center;margin:16px 0 4px}
+.sheet .req b{font-size:17px}
+.sheet .req span{font-size:12px;font-weight:700;background:var(--gray-soft);border-radius:6px;padding:3px 8px}
+.qty{display:flex;align-items:center;justify-content:center;gap:22px;margin:16px 0}
+.qty b{font-size:22px;min-width:30px;text-align:center}
+.share-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+.share-grid button,.share-grid a{display:flex;flex-direction:column;align-items:center;gap:8px;border:0;background:none;cursor:pointer;text-decoration:none;color:inherit;font-size:13px;font-weight:600;padding:6px 0}
+.share-grid .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px}
+.msgbox{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.toast,.toggle::after{transition:none}}
+.empty{text-align:center;padding:30px 10px}
+.empty b{display:block;font-size:19px;margin-bottom:4px}
+table{width:100%;border-collapse:collapse}
+</style>
+</head>
+<body>
+<div id="app"><div class="page"><p class="pad muted" style="padding-top:30px">Đang tải…</p></div></div>
+<div id="overlay"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="./supabase-config.js"></script>
+<script src="./supabase-adapter.js"></script>
+<script>
+// Link chia sẻ mặc định cho THÀNH VIÊN — bỏ query string (đặc biệt ?manage=
+// là token bí mật của host) để không lỡ tay gửi nhầm quyền host cho team.
+const ARTIFACT_URL = (window.SUPABASE_SHARE_URL || (location.origin + location.pathname)).split("?")[0].split("#")[0];
+/* ================= Helpers ================= */
+const BANKS = [
+  ["Vietcombank","970436"],["VietinBank","970415"],["BIDV","970418"],["Agribank","970405"],
+  ["Techcombank","970407"],["MB Bank","970422"],["ACB","970416"],["VPBank","970432"],
+  ["TPBank","970423"],["Sacombank","970403"],["HDBank","970437"],["VIB","970441"],
+  ["SHB","970443"],["Eximbank","970431"],["MSB","970426"],["OCB","970448"],
+  ["SeABank","970440"],["LPBank","970449"],["Nam A Bank","970428"],["Bac A Bank","970409"],
+  ["BVBank (Timo)","970454"],["ABBANK","970425"],["PVcomBank","970412"],["Kienlongbank","970452"],
+  ["NCB","970419"],["VietABank","970427"],["Cake by VPBank","546034"],["Shinhan Bank","970424"],
+  ["Woori Bank","970457"],["UOB","970458"]
+];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => Math.round(Number(n)||0).toLocaleString("vi-VN") + "đ";
+const clone = o => JSON.parse(JSON.stringify(o ?? null));
+const rid = () => Math.random().toString(36).slice(2, 10);
+const pad = n => String(n).padStart(2, "0");
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+const WD = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
+function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T00:00:00"); return `${WD[d.getDay()]}, ${d.getDate()}/${d.getMonth()+1}`; }
+const hhmm = t => { const d=new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+function norm(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase().replace(/\s+/g," ").trim(); }
+function ascii(s){ return norm(s).toUpperCase().replace(/[^A-Z0-9 ]/g,"").replace(/\s+/g," ").trim(); }
+function lsGet(k){ try{ return localStorage.getItem(k); }catch{ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch{} }
+const tlv = (id,v) => id + String(v.length).padStart(2,"0") + v;
+function crc16(str){ let c=0xFFFF; for(let i=0;i<str.length;i++){ c^=str.charCodeAt(i)<<8; for(let j=0;j<8;j++){ c=(c&0x8000)?((c<<1)^0x1021):(c<<1); c&=0xFFFF; } } return c.toString(16).toUpperCase().padStart(4,"0"); }
+function vietqr(bin, acc, amount, info){
+  const bene = tlv("00",bin) + tlv("01",acc);
+  const mai = tlv("00","A000000727") + tlv("01",bene) + tlv("02","QRIBFTTA");
+  let p = tlv("00","01") + tlv("01", amount ? "12" : "11") + tlv("38",mai) + tlv("53","704")
+    + (amount ? tlv("54", String(Math.round(amount))) : "") + tlv("58","VN")
+    + (info ? tlv("62", tlv("08", info)) : "") + "6304";
+  return p + crc16(p);
+}
+function qrSvg(payload){ if (typeof qrcode === "undefined") return ""; try{ const q=qrcode(0,"M"); q.addData(payload); q.make(); return q.createSvgTag(6,12); }catch{ return ""; } }
+function transferInfo(date, name){ const d=new Date(date+"T00:00:00"); return ("COM"+pad(d.getDate())+pad(d.getMonth()+1)+" "+ascii(name)).slice(0,25).trim(); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("on"),2600); }
+async function copyText(t, msg="Đã copy"){
+  try{ await navigator.clipboard.writeText(t); toast(msg); return true; }catch{}
+  const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
+  let ok=false; try{ ok=document.execCommand("copy"); }catch{} ta.remove();
+  toast(ok ? msg : "Trình duyệt chặn copy, hãy chọn và copy thủ công"); return ok;
+}
+const I = {
+  back:'<svg class="i" viewBox="0 0 24 24"><path d="M19 12H5M11 5l-7 7 7 7"/></svg>',
+  close:'<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus:'<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  minus:'<svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
+  pen:'<svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
+  group:'<svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14c2.8 0 5 2 5 5"/></svg>',
+  addp:'<svg class="i" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.2"/><path d="M4 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M19 7v6M16 10h6"/></svg>',
+  share:'<svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>',
+  bill:'<svg class="i" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
+  clock:'<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  cal:'<svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M9 13l2 2 4-4"/></svg>',
+  menu:'<svg class="i" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
+  store:'<svg class="i" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9h16v11H4zM9 20v-6h6v6"/></svg>',
+  link:'<svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  chev:'<svg class="i" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+  check:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>'
+};
+const HERO = `<svg viewBox="0 0 260 200" aria-hidden="true">
+  <circle cx="150" cy="118" r="92" fill="#fff" opacity=".16"/>
+  <path d="M60 36 C66 26 58 18 64 8" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".8"/>
+  <path d="M86 40 C92 30 84 22 90 12" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".8"/>
+  <rect x="150" y="10" width="8" height="130" rx="4" transform="rotate(28 154 75)" fill="#111"/>
+  <rect x="170" y="14" width="8" height="130" rx="4" transform="rotate(34 174 79)" fill="#111"/>
+  <ellipse cx="110" cy="112" rx="96" ry="30" fill="#fff"/>
+  <circle cx="84" cy="96" r="14" fill="#fff"/><circle cx="110" cy="88" r="18" fill="#fff"/><circle cx="138" cy="96" r="14" fill="#fff"/>
+  <path d="M14 112 h192 a96 84 0 0 1 -192 0z" fill="#111"/>
+  <path d="M40 150 h140" stroke="#F7941D" stroke-width="6" stroke-linecap="round"/>
+</svg>`;
+
+/* ================= State ================= */
+const S = {
+  db:null, sample:null, uid:null, canEdit:false, isOwner:false, imagesOK:false,
+  config:null, cfgLoaded:false, session:null, sessLoaded:false, orders:{}, ordersLoaded:false, dishes:[], recent:[],
+  view:"home", sheet:null, cart:null, md:null, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
+};
+const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
+const setPrice = (n, base=unitPrice()) => n<=0 ? 0 : Math.round(base*Math.max(n,2)/2/1000)*1000;
+const priceRule = (b=unitPrice()) => `1 món được gấp đôi (${money(b)}), 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
+const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
+const curDate = () => S.session?.date;
+const curKey = () => S.sessKey;
+const shareLink = () => S.config?.shareUrl || ARTIFACT_URL;
+function setLabel(s){ const ds=s.dishes||[]; return ds.length===1 ? `${ds[0].name} (x2 gấp đôi)` : ds.map(d=>d.name).join(" + "); }
+function deadlineAt(s){ if(!s) return 0; if (s.deadlineAt) return s.deadlineAt; if (s.deadline){ const [h,m]=s.deadline.split(":").map(Number); const d=new Date(s.date+"T00:00:00"); d.setHours(h,m,0,0); return d.getTime(); } return 0; }
+function isLocked(){
+  const s=S.session; if(!s) return true;
+  if (s.status==="closed" || s.date < todayStr()) return true;
+  if (s.autoClose!==false && deadlineAt(s) && Date.now()>deadlineAt(s)) return true;
+  return false;
+}
+function ordersFor(date){
+  return Object.entries(S.orders).map(([docId,d])=>{ const o=d?.days?.[date]; return o ? {docId,...o} : null; })
+    .filter(Boolean).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+}
+const qtyOf = s => Number(s.qty||1);
+const setsCount = o => o.sets.reduce((a,s)=>a+qtyOf(s),0);
+function statusOf(o){
+  if (o.payMethod==="host") return ["Trưởng nhóm","b-gry"];
+  if (o.payMethod==="cash") return o.payStatus==="confirmed" ? ["Đã thu tiền mặt","b-grn"] : ["Tiền mặt, chờ thu","b-org"];
+  if (o.payStatus==="confirmed") return ["Đã nhận chuyển khoản","b-grn"];
+  if (o.payStatus==="claimed") return ["Báo đã chuyển","b-yel"];
+  return ["Chưa chuyển","b-red"];
+}
+const hostPaysFor = docId => docId===S.uid && S.isOwner && S.config?.hostPays !== false;
+const hostName = () => S.session?.hostName || "trưởng nhóm";
+
+/* ================= DB ================= */
+function writeErr(e){
+  if (e?.code==="invalid_argument") toast("Bạn cần mở đúng link quản lý (link trưởng nhóm) để làm thao tác này.");
+  else if (e?.code==="invalid_token") toast("Link quản lý không hợp lệ hoặc đã hết hạn.");
+  else toast("Không lưu được, thử lại sau ít giây.");
+  console.error(e);
+}
+async function mutateOrder(docId, date, fn){ await S.db.mutateOrder(docId, date, fn); }
+async function setPay(docId, patch){
+  try{
+    if (docId===S.uid) await mutateOrder(docId, curKey(), o=>o?{...o,...patch,updatedAt:Date.now()}:null);
+    else await window.hostSetOrderPay(curKey(), docId, patch.payStatus);
+  }catch(e){ writeErr(e); }
+}
+
+/* ================= Cart ================= */
+function newCart(docId, existing, proxy=false){
+  return { docId, date:curKey(), proxy, existing: existing?clone(existing):null,
+    name: existing ? existing.name : (proxy ? "" : (lsGet("comtrua:name")||"")),
+    ...(()=>{ const guests=[]; const gid=n=>{ let g=guests.find(x=>x.name===n); if(!g){ g={id:"g"+rid(),name:n}; guests.push(g); } return g.id; };
+      (existing?.guests||[]).forEach(gid);
+      const items = existing ? existing.sets.map(s=>({ picks:s.dishes.map(d=>d.id), names:Object.fromEntries(s.dishes.map(d=>[d.id,d.name])), note:s.note||"", qty:qtyOf(s), for: s.for ? gid(s.for) : null })) : [];
+      return { guests, items }; })(),
+    payMethod: existing && existing.payMethod!=="host" ? existing.payMethod : null };
+}
+function groupSets(o){
+  const self={who:o.name, self:true, sets:[]}, out=[self], map={};
+  (o.guests||[]).forEach(g=>{ if(!map[g]){ map[g]={who:g,self:false,sets:[]}; out.push(map[g]); } });
+  o.sets.forEach(st=>{ const k=st.for; if(!k) self.sets.push(st); else { if(!map[k]){ map[k]={who:k,self:false,sets:[]}; out.push(map[k]); } map[k].sets.push(st); } });
+  return out.filter(g=>g.sets.length);
+}
+const subTotal = sets => sets.reduce((a,s)=>a+s.price*qtyOf(s),0);
+function groupedLines(o){
+  const gs=groupSets(o);
+  if (gs.length<=1) return o.sets.map(st=>lineHtml(setLabel(st), st.note, qtyOf(st), st.price*qtyOf(st))).join("");
+  return gs.map(g=>`<div class="who"><span>${esc(g.who)}${g.self?" (bạn đặt)":" (được đặt hộ)"}</span><span class="num">${money(subTotal(g.sets))}</span></div>`+g.sets.map(st=>lineHtml(setLabel(st), st.note, qtyOf(st), st.price*qtyOf(st))).join("")).join("");
+}
+const guestsNote = o => o.guests?.length ? `đặt hộ ${o.guests.join(", ")}` : "";
+const mine = () => S.orders[S.uid]?.days?.[curKey()];
+function ensureCart(){
+  if (S.cart && S.cart.date===curKey()) return true;
+  if (isLocked() && !S.canEdit){ toast("Đơn nhóm đã chốt, không thêm món được nữa"); return false; }
+  S.cart = newCart(S.uid, mine()); return true;
+}
+const cartTotal = c => c.items.reduce((a,it)=>a+setPrice(it.picks.length)*it.qty,0);
+const cartCount = c => c.items.reduce((a,it)=>a+it.qty,0);
+function validate(c){
+  if (!c.items.length) return "Giỏ hàng chưa có món";
+  if (!c.name.trim()) return "Nhập tên của bạn";
+  const empty=c.guests.find(g=>!c.items.some(it=>it.for===g.id));
+  if (empty) return `Chưa chọn món cho ${empty.name}`;
+  if (!hostPaysFor(c.docId) && !c.payMethod) return "Vui lòng chọn hình thức thanh toán";
+  if (isLocked() && !S.canEdit) return "Đơn nhóm đã chốt";
+  return null;
+}
+async function submitCart(){
+  const c=S.cart; if (validate(c) || S.busy) return;
+  const base=unitPrice();
+  const sets=c.items.map(it=>({ dishes: it.picks.map(id=>({ id, name: dishById(id)?.nameVi || it.names[id] || "?", portions: it.picks.length===1?2:1 })), note: it.note.trim(), qty: it.qty, price: setPrice(it.picks.length, base), for: c.guests.find(g=>g.id===it.for)?.name || null }));
+  const total=sets.reduce((a,s)=>a+s.price*s.qty,0);
+  const method=hostPaysFor(c.docId)?"host":c.payMethod; const prev=c.existing;
+  let payStatus = method==="host"?"confirmed":"unpaid", reset=false;
+  if (prev && prev.payMethod===method && prev.total===total) payStatus=prev.payStatus;
+  else if (prev && prev.payStatus!=="unpaid" && prev.payMethod!=="host") reset=true;
+  const order={ name:c.name.trim(), guests:c.guests.map(g=>g.name), sets, total, pricePerSet:base, payMethod:method, payStatus, createdAt:prev?.createdAt||Date.now(), updatedAt:Date.now(), byHost:c.docId!==S.uid };
+  S.busy=true; render();
+  try{
+    await mutateOrder(c.docId, c.date, ()=>order);
+    if (c.docId===S.uid) lsSet("comtrua:name", order.name);
+    S.cart=null; S.view="cart";
+    toast(reset ? "Đã lưu. Tổng tiền hoặc hình thức thay đổi nên trạng thái thanh toán được đặt lại." : "Đặt món thành công");
+  }catch(e){ writeErr(e); }
+  S.busy=false; render(); window.scrollTo({top:0});
+}
+
+/* ================= Menu builder ================= */
+function ensureMd(mode){
+  if (S.md) return;
+  const s=S.session, today=todayStr(), live = mode==="edit" && s && s.date===today && !S.viewKey;
+  const left = live ? Math.max(5, Math.round((deadlineAt(s)-Date.now())/60000/5)*5) : 30;
+  S.md = { items: live ? clone(s.menu) : [], minutes: left, autoClose: live ? s.autoClose!==false : true,
+    hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (S.recent[0]?.shopName||""), text:"", mode: live?"edit":"new" };
+}
+function libMatch(name){ const n=norm(name); return S.dishes.find(d=>norm(d.nameVi)===n); }
+function addDraftItem(vi, en=""){
+  vi=vi.trim(); if(!vi) return false;
+  if (S.md.items.some(x=>norm(x.nameVi)===norm(vi))) return false;
+  const m=libMatch(vi);
+  S.md.items.push(m ? {id:m.id,nameVi:m.nameVi,nameEn:m.nameEn||en,soldOut:false} : {id:null,nameVi:vi,nameEn:en,soldOut:false});
+  return true;
+}
+const AI_PROMPT = `Ảnh đính kèm là thực đơn cơm trưa hôm nay của một quán cơm Việt Nam.
+Liệt kê TẤT CẢ các món ăn có trong ảnh theo đúng thứ tự xuất hiện.
+Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"nameVi": "tên món tiếng Việt, có dấu, đúng chính tả", "nameEn": "tên tiếng Anh nếu ảnh có ghi, không có thì để chuỗi rỗng"}.
+Bỏ qua tiêu đề, giá tiền, ngày tháng, số điện thoại và những dòng không phải món ăn.
+Ví dụ: [{"nameVi":"Thịt kho trứng","nameEn":"Braised pork with eggs"}]`;
+function aiErr(code){
+  return ({ not_granted:"Bạn chưa cho phép dùng Claude để đọc ảnh. Có thể dán text hoặc chọn từ thư viện món.",
+    rate_limited:"Đang gửi quá nhiều yêu cầu, đợi một chút rồi thử lại.",
+    image_rejected:"Ảnh không đọc được (sai định dạng hoặc quá lớn). Hãy dùng ảnh JPG hoặc PNG.",
+    invalid_json:"Không nhận ra danh sách món trong ảnh này. Thử ảnh rõ hơn hoặc dán text.",
+    images_unavailable:"Chế độ xem này không gửi được ảnh. Hãy dán text menu." })[code] || "Không đọc được ảnh lúc này, thử lại sau.";
+}
+async function readMenuImage(file){
+  if (!file || !file.type?.startsWith("image/")) return;
+  if (!S.sample || !S.imagesOK){ toast("Không đọc được ảnh ở chế độ xem này. Hãy dán text menu."); return; }
+  ensureMd(); if (S.ai?.preview) URL.revokeObjectURL(S.ai.preview);
+  S.ai={busy:true, preview:URL.createObjectURL(file)}; render();
+  try{
+    const res=await S.sample.json(AI_PROMPT,{images:file});
+    const arr=Array.isArray(res)?res:(Array.isArray(res?.dishes)?res.dishes:[]);
+    let n=0; for(const x of arr){ if(addDraftItem(String(x?.nameVi||""), String(x?.nameEn||"").trim())) n++; }
+    S.ai={busy:false, preview:S.ai.preview, msg: n?`Đã thêm ${n} món từ ảnh. Kiểm tra lại tên món bên dưới.`:"Không có món mới nào được thêm."};
+  }catch(e){ S.ai={busy:false, preview:S.ai.preview, err:aiErr(e?.code)}; }
+  render();
+}
+async function publishGroup(){
+  const md=S.md; md.items=md.items.filter(x=>x.nameVi.trim());
+  if (!md.hostName.trim()){ toast("Nhập tên trưởng nhóm"); return; }
+  if (!md.items.length){ toast("Thực đơn chưa có món nào"); return; }
+  if (!S.config?.accountNo){ toast("Hãy thiết lập tài khoản nhận tiền trước"); S.view="bank"; render(); return; }
+  S.busy=true; render();
+  const date=todayStr(), dAt=Date.now()+md.minutes*60000;
+  try{
+    let key = md.mode==="edit" ? S.config.current : date;
+    if (md.mode!=="edit"){ const ex=await S.db.doc("sessions/"+key).get(); if (ex.exists) key = date+"-"+rid().slice(0,5); }
+    const snap=await (async()=>{ try{ return await S.db.doc("sessions/"+key).get(); }catch{ return {exists:false}; } })();
+    const isNew=!snap.exists;
+    const prevKey = S.config.current;
+    for (const it of md.items){
+      if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), (it.nameEn||"").trim()); continue; }
+      if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), (it.nameEn||"").trim());
+    }
+    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut}));
+    await window.hostUpsertSession({ key, date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000),
+      menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim() });
+    if (isNew && prevKey && prevKey!==key){ try{ const ps=await S.db.doc("sessions/"+prevKey).get(); if(ps.exists && ps.data().status!=="closed") await window.hostSetSessionStatus(prevKey,"closed"); }catch{} }
+    if (S.config.current!==key) await S.db.doc("config/main").update({current:key});
+    S.viewKey=null; S.cart=null;
+    lsSet("comtrua:name", md.hostName.trim());
+    S.md=null; S.view="home"; S.sheet={kind:"share"};
+    toast(isNew?"Đã tạo đơn hàng nhóm":"Đã cập nhật đơn hàng nhóm");
+  }catch(e){ writeErr(e); }
+  S.busy=false; render();
+}
+
+/* ================= Render ================= */
+const app=document.getElementById("app"), overlay=document.getElementById("overlay");
+function render(){
+  const ae=document.activeElement, fid=ae?.id; let s1=null,s2=null; try{ s1=ae.selectionStart; s2=ae.selectionEnd; }catch{}
+  app.innerHTML=view(); overlay.innerHTML=sheetView();
+  if (fid){ const el=document.getElementById(fid); if(el){ el.focus({preventScroll:true}); try{ if(s1!=null) el.setSelectionRange(s1,s2); }catch{} } }
+}
+function view(){
+  if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
+  if (!S.cfgLoaded||!S.sessLoaded||!S.ordersLoaded) return `<div class="page"><p class="pad muted" style="padding-top:30px"><span class="spin"></span> Đang tải…</p></div>`;
+  if (S.canEdit && S.view==="create") return createView();
+  if (S.canEdit && S.view==="bank") return bankView();
+  if (S.view==="cart" && S.session) return cartView();
+  return homeView();
+}
+const topbar = (title, sub, left="back", right="", to="home") =>
+  `<div class="topbar"><button class="icon" data-a="go" data-v="${to}" aria-label="${left==="back"?"Quay lại":"Đóng"}">${left==="back"?I.back:I.close}</button><div class="tt"><b>${esc(title)}</b>${sub?`<small>${esc(sub)}</small>`:""}</div>${right}</div>`;
+
+/* ---------- Home (shop page) ---------- */
+function homeView(){
+  const s=S.session, host=S.canEdit, live = s && s.date===todayStr();
+  const locked=isLocked();
+  const hbtn = host && S.config ? `<div class="hbtn"><button data-a="go" data-v="bank">${I.pen} Cài đặt</button></div>` : "";
+  let card;
+  if (!s || !live){
+    card = `<div class="shop"><div class="body"><h1>Cơm trưa văn phòng</h1><div class="meta">${esc(fmtDate(todayStr()))}</div>
+      <div class="meta">${host?"Chưa có đơn nhóm hôm nay. Tạo đơn rồi gửi link cho cả team vào chọn món.":"Chưa có đơn nhóm hôm nay. Trưởng nhóm sẽ gửi link khi thực đơn sẵn sàng."}</div></div></div>`;
+  } else {
+    card = `<div class="shop"><div class="grp">${I.group}<span>Đơn hàng nhóm của ${esc(hostName())}</span></div><div class="body">
+      <h1>${esc(s.shopName || "Cơm trưa văn phòng")}</h1>
+      <div class="meta">${esc(fmtDate(s.date))}</div>
+      <div class="meta"><span class="price">${money(unitPrice())} / suất 2 món</span></div>
+      <div class="meta"><span class="dl ${locked?"closed":""}">${I.clock} ${s.status==="closed"?"Đã chốt đơn":locked?"Đã hết giờ đặt món":(s.autoClose===false?"Dự kiến chốt lúc ":"Chốt đơn lúc ")+esc(hhmm(deadlineAt(s)))}</span></div></div></div>`;
+  }
+  let pills=""; const canProxy = live && !S.viewKey && (!locked || host);
+  if (host && (!s || !live)) pills = `<button class="pill hl" data-a="create" data-v="new">${I.addp} Đặt đơn nhóm</button>`;
+  else if (live){
+    pills = `<button class="pill hl" data-a="share">${I.addp} Mời thêm thành viên</button>`;
+    if (host) pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Quản lý đơn</button><button class="pill" data-a="create" data-v="edit">${I.menu} Sửa thực đơn</button><button class="pill" data-a="create" data-v="new">${I.plus} Đặt đơn nhóm mới</button>`;
+    else pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Đơn của tôi</button>`;
+    if (canProxy) pills += `<button class="pill" data-a="proxy-open">${I.group} Đặt hộ${S.cart?.guests?.length?` (${S.cart.guests.length})`:""}</button>`;
+  }
+  if (s && !live && (host || mine())) pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} ${host?"Quản lý đơn":"Đơn của tôi"} ${esc(fmtDate(s.date))}</button>`;
+  const proxyBanner = S.cart && S.cart.docId!==S.uid ? `<div class="banner" style="margin-top:14px"><span>Đang ${S.cart.existing?`sửa đơn của <b>${esc(S.cart.existing.name)}</b>`:"<b>đặt hộ</b> người khác"}</span><button class="btn" data-a="cancel-cart">Huỷ</button></div>` : "";
+  let menu="";
+  if (s && live){
+    const m=s.menu||[];
+    menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
+      <p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>
+      ${m.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</div>
+        ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}
+    </div>`;
+  } else if (host && S.config && !live) menu = "";
+  if (host && !S.config) menu = `<div class="band"></div><div class="pad"><div class="note">Lần đầu sử dụng: bấm <b>Đặt đơn nhóm</b>, bạn sẽ được hướng dẫn nhập tài khoản nhận tiền trước.</div></div>`;
+  if (host){
+    const rec=S.recent.filter(r=>r.id!==S.config?.current).slice(0,5);
+    if (rec.length) menu += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:6px">Đơn nhóm gần đây</h2>${rec.map(r=>{ const l=ordersFor(r.id); const un=l.filter(o=>o.payMethod!=="host"&&o.payStatus!=="confirmed").length;
+      return `<button class="opt" data-a="view-sess" data-v="${esc(r.id)}"><span class="t"><b>${esc(r.shopName||"Cơm trưa")}: ${esc(fmtDate(r.date))}${r.deadline?` (chốt ${esc(r.deadline)})`:""}</b><small>${l.reduce((a,o)=>a+setsCount(o),0)} suất${un?`, còn ${un} người chưa thanh toán`:", đã thu đủ"}</small></span>${I.chev}</button>`; }).join("")}</div>`;
+  }
+  let bar="";
+  if (S.cart && S.cart.items.length) bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Giỏ hàng · ${cartCount(S.cart)} suất</span><span class="num">${money(cartTotal(S.cart))}</span></button></div></div>`;
+  else if (live && mine()){ const [l]=statusOf(mine()); bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Đơn của bạn: ${setsCount(mine())} suất</span><span>${esc(l)}</span></button></div></div>`; }
+  return `<div class="page"><div class="hero">${hbtn}</div>${card}${proxyBanner}<div class="pills">${pills}</div>${menu}${bar}</div>`;
+}
+
+/* ---------- Sheets ---------- */
+function sheetView(){
+  const sh=S.sheet; if(!sh) return "";
+  if (sh.kind==="item") return itemSheet(sh);
+  if (sh.kind==="share") return shareSheet();
+  if (sh.kind==="proxy") return proxySheet(sh);
+  if (sh.kind==="confirm") return `<div class="scrim" data-a="ask-no"></div><div class="sheet" role="alertdialog" aria-label="Xác nhận"><div class="grab"></div>
+    <p style="font-size:17px;font-weight:600;margin:6px 0 20px">${esc(sh.msg)}</p>
+    <button class="cta" data-a="ask-ok" ${sh.danger?'style="background:var(--chili);color:#fff"':""}>${esc(sh.ok)}</button>
+    <button class="cta" data-a="ask-no" style="background:var(--surface);border:1.5px solid var(--line);margin-top:10px">Quay lại</button></div>`;
+  return "";
+}
+function proxySheet(sh){
+  const n=sh.names.length;
+  return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Đặt hộ">
+    <div class="grab"></div><div class="between"><h3>Đặt hộ</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
+    <div class="muted small">Bạn chọn món và thanh toán luôn cho những người này. Kết quả cuối cùng sẽ ghi rõ suất nào của ai.</div>
+    <div class="setting" style="padding-bottom:4px"><div class="t"><b>Đặt hộ mấy người?</b></div><div class="stepper"><button class="icon soft" data-a="px-n" data-v="-1" aria-label="Bớt 1 người">${I.minus}</button><b class="num">${n} người</b><button class="icon soft" data-a="px-n" data-v="1" aria-label="Thêm 1 người">${I.plus}</button></div></div>
+    <div style="display:grid;gap:10px">${sh.names.map((nm,i)=>`<div><label class="f" for="px-${i}">Tên người thứ ${i+1}</label><input type="text" id="px-${i}" data-f="px" data-i="${i}" value="${esc(nm)}" placeholder="VD: Minh (QA)" maxlength="40"></div>`).join("")}</div>
+    ${sh.err?`<p class="small err">${esc(sh.err)}</p>`:`<p class="small muted">Bớt người sẽ xoá các suất đã chọn cho người đó.</p>`}
+    <button class="cta" data-a="px-ok" style="margin-top:6px">Xong, chọn món</button>
+    ${S.cart?.guests?.length?`<button class="link red" style="display:block;margin:14px auto 0" data-a="px-clear">Bỏ đặt hộ</button>`:""}
+  </div>`;
+}
+function sheetPeople(){ return [{id:"self",name:(S.cart?.name.trim()||"Bạn")+" (bạn)"}, ...(S.cart?.guests||[]).map(g=>({id:g.id,name:g.name}))]; }
+function itemSheet(sh){
+  const m=S.session?.menu||[], base=unitPrice();
+  const multi = sh.index==null && (S.cart?.guests?.length||0)>0;
+  const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
+  const opts=m.map(d=>{ const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
+    return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
+  const label = n===0 ? "Chọn ít nhất 1 món" : n===1 ? `1 món: phần món được gấp đôi, ${money(base)}` : n===2 ? `2 món: ${money(base)}` : `${n} món: ${money(base/2)} × ${n} = ${money(setPrice(n,base))}`;
+  const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
+  const total = filled.reduce((a,[,x])=>a+setPrice(x.picks.length,base)*x.qty,0);
+  const count = filled.reduce((a,[,x])=>a+x.qty,0);
+  const who = people.find(p=>p.id===sh.active)?.name || "";
+  const tabs = multi ? `<div class="ptabs" role="tablist" aria-label="Chọn món cho từng người">${people.map(p=>{ const x=sh.per[p.id]; const k=x.picks.length;
+      return `<button role="tab" aria-selected="${sh.active===p.id}" data-a="sh-tab" data-v="${esc(p.id)}">${esc(p.name)}${k?`<span class="ok">${I.check}</span>`:""}</button>`; }).join("")}</div>
+      <p class="small muted" style="margin:6px 0 0">Mỗi người chọn món và ghi chú riêng. Người nào chưa chọn món sẽ không được thêm.</p>` : "";
+  return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Chọn món">
+    <div class="grab"></div><div class="between"><h3>${sh.index!=null&&S.cart?.guests?.length?`Suất của ${esc(who)}`:"Cơm phần"}</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
+    <div class="muted">${money(base)} cho 2 món</div>
+    ${tabs}
+    <div class="req"><b>${multi?`Món cho ${esc(who)}`:"Chọn món"}</b><span>Bắt buộc, ít nhất 1 món</span></div>
+    <div class="small muted">${label}</div>
+    <div>${opts}</div>
+    <div class="req"><b>${multi?`Ghi chú của ${esc(who)}`:"Ghi chú cho quán"}</b><span>Không bắt buộc</span></div>
+    <input type="text" id="sh-note-${esc(sh.active)}" data-f="sh-note" value="${esc(cur.note)}" placeholder="VD: ít cơm, không hành" maxlength="120">
+    <div class="qty"><button class="icon soft" data-a="sh-qty" data-v="-1" aria-label="Giảm">${I.minus}</button><b class="num">${cur.qty}</b><button class="icon soft" data-a="sh-qty" data-v="1" aria-label="Tăng">${I.plus}</button></div>
+    <button class="cta split" data-a="sh-add" ${count?"":"disabled"}><span>${sh.index!=null?"Cập nhật giỏ hàng":multi?`Thêm ${count} suất vào giỏ`:"Thêm vào giỏ hàng"}</span><span class="num">${count?money(total):""}</span></button>
+    ${sh.index!=null?`<button class="link red" style="display:block;margin:14px auto 0" data-a="sh-remove">Xoá khỏi giỏ hàng</button>`:""}
+  </div>`;
+}
+function shareMsg(){
+  const s=S.session; if(!s) return shareLink();
+  return `🍱 ${hostName()} mời đặt cơm trưa ${fmtDate(s.date)}${s.shopName?` (${s.shopName})`:""}.\nChốt đơn lúc ${hhmm(deadlineAt(s))}. Vào chọn món tại:\n${shareLink()}`;
+}
+function canNativeShare(){
+  if (!navigator.share) return false;
+  try{ const fp=document.permissionsPolicy||document.featurePolicy; if (fp?.allowsFeature) return fp.allowsFeature("web-share"); }catch{}
+  return true;
+}
+function shareSheet(){
+  const link=shareLink(), msg=shareMsg();
+  const app=(key,label,bg,ic)=>`<button data-a="share-app" data-v="${key}"><span class="ic" style="background:${bg}">${ic}</span>${label}</button>`;
+  return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Mời thành viên">
+    <div class="grab"></div><div class="between"><h3>Mời thành viên</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
+    <div class="muted small">Copy tin nhắn mời rồi dán vào nhóm chat của team</div>
+    <div class="msgbox" style="margin-top:14px">${esc(msg)}</div>
+    <button class="cta" data-a="copy-invite" style="margin-top:12px">${I.link} Copy tin nhắn mời</button>
+    <div class="req" style="margin-top:20px"><b>Hoặc copy và mở nhanh</b></div>
+    <div class="share-grid">
+      ${app("zalo","Zalo","#0068FF","Zalo")}${app("teams","Teams","#5B5FC7","T")}${app("facebook","Facebook","#1877F2","f")}
+      ${canNativeShare()?app("native","Khác","#111",I.share):`<button data-a="copy" data-t="${esc(link)}"><span class="ic" style="background:#F7941D;color:#111">${I.link}</span>Chỉ copy link</button>`}
+    </div>
+    <p class="small muted">Ai có link đều mở được, không cần tài khoản.</p>
+  </div>`;
+}
+/* ---------- Cart (Kiểm tra đơn hàng) ---------- */
+function lineHtml(label, note, qty, price, acts=""){
+  return `<div class="line"><span class="q">${qty}x</span><div class="d"><b style="font-weight:600">${esc(label)}</b>${note?`<small>Ghi chú: ${esc(note)}</small>`:""}${acts}</div><span class="p num">${money(price)}</span></div>`;
+}
+function cartView(){
+  const s=S.session, host=S.canEdit, locked=isLocked(), c=S.cart && S.cart.date===curKey() ? S.cart : null;
+  const right = s.date===todayStr() && !S.viewKey ? `<button class="pill" style="padding:8px 14px" data-a="share">${I.addp} Mời thêm</button>` : "";
+  let html = topbar("Kiểm tra đơn hàng", s.shopName || fmtDate(s.date), "back", right);
+  if (S.viewKey) html += `<div class="banner"><span>Đang xem đơn nhóm cũ ${esc(fmtDate(s.date))}</span><button class="btn" data-a="back-current">Về đơn hiện tại</button></div>`;
+  if (host) html += hostSummary();
+  const isOther = c && c.docId!==S.uid;
+  // own / editing cart
+  html += `<div class="pad"><div class="between" style="margin:8px 0 12px"><h2 class="sec">${isOther?"Giỏ hàng đặt hộ":"Giỏ hàng của bạn"}</h2>${(!locked||host)&&!S.viewKey?`<button class="link" data-a="go" data-v="home">Thêm món</button>`:""}</div>`;
+  if (c){
+    const hp=hostPaysFor(c.docId);
+    html += `<div class="card"><div class="mem-head"><span class="avatar">${esc((c.name||"?").trim()[0]||"?")}</span><div class="nm"><input type="text" id="c-name" data-f="c-name" value="${esc(c.name)}" placeholder="${isOther?"Tên người được đặt hộ":"Nhập tên của bạn"}" maxlength="40" aria-label="Tên"></div>${hp?`<span class="badge b-gry">Trưởng nhóm</span>`:""}</div>
+      ${c.guests.length ? `<div class="between small" style="margin-bottom:6px"><span>Đặt hộ ${c.guests.length} người: <b>${esc(c.guests.map(g=>g.name).join(", "))}</b></span><button class="link" data-a="proxy-open">Sửa</button></div>` : `<button class="link" data-a="proxy-open" style="margin-bottom:6px">+ Đặt hộ người khác</button>`}
+      ${c.items.length ? cartGroups(c).map(g=>(c.guests.length?`<div class="who"><span>${esc(g.name)}</span><span class="num">${money(g.items.reduce((a,x)=>a+setPrice(x.it.picks.length)*x.it.qty,0))}</span></div>`:"")+(g.items.length?g.items.map(({it,i})=>{ const lbl = it.picks.length===1 ? `${(dishById(it.picks[0])?.nameVi||it.names[it.picks[0]]||"?")} (x2 gấp đôi)` : it.picks.map(id=>dishById(id)?.nameVi||it.names[id]||"?").join(" + ");
+          return lineHtml(lbl, it.note, it.qty, setPrice(it.picks.length)*it.qty, `<div class="acts"><button data-a="edit-item" data-i="${i}">Sửa</button><button data-a="del-item" data-i="${i}">Xoá</button></div>`); }).join(""):`<p class="small err" style="margin:6px 0">Chưa chọn món. Bấm Thêm món, rồi chọn tab “${esc(g.name)}”.</p>`)).join("")
+        : `<p class="muted" style="margin:6px 0">Chưa thêm món nào.</p>`}
+      ${c.existing?`<button class="link red" data-a="cancel-cart" style="margin-top:8px">Huỷ thay đổi</button>`:""}
+    </div>`;
+    html += `<div class="band" style="margin:18px -20px"></div><h2 class="sec" style="margin-bottom:6px">Thanh toán</h2>`;
+    if (c.guests.length && !hp) html += `<p class="small muted" style="margin:0 0 4px">Bạn thanh toán một lần cho cả ${c.guests.length+1} người: ${money(cartTotal(c))}.</p>`;
+    html += hp ? `<div class="note">Bạn là trưởng nhóm nên phần của bạn không cần thanh toán.</div>`
+      : `<div role="radiogroup" aria-label="Hình thức thanh toán">
+          <button class="opt" role="radio" aria-checked="${c.payMethod==="transfer"}" data-a="pay" data-v="transfer"><span class="t"><b>Chuyển khoản</b><small>Quét mã QR đã có sẵn số tiền</small></span><span class="radio"></span></button>
+          <button class="opt" role="radio" aria-checked="${c.payMethod==="cash"}" data-a="pay" data-v="cash"><span class="t"><b>Tiền mặt</b><small>Đưa trực tiếp cho trưởng nhóm</small></span><span class="radio"></span></button></div>`;
+    html += `<div class="between" style="margin-top:18px"><div><b style="font-size:18px">Tổng tạm tính</b><div class="small muted">${cartCount(c)} suất</div></div><b class="num" style="font-size:20px">${money(cartTotal(c))}</b></div></div>`;
+    const err=validate(c);
+    html += `<div class="bottom"><div class="in"><button class="cta" data-a="submit" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} Xác nhận đặt món</button>${err?`<div class="hint">${esc(err)}</div>`:""}</div></div>`;
+  } else {
+    const o=mine();
+    if (o) html += myOrderCard(o) + `</div>` + payBlock(o);
+    else html += `<div class="card"><div class="mem-head"><span class="avatar">?</span><div class="nm">Bạn</div></div><p class="muted" style="margin:0">Chưa thêm món nào.</p></div></div>`;
+  }
+  // other members
+  const others = ordersFor(curKey()).filter(o=>o.docId!==S.uid && !(c && o.docId===c.docId));
+  if (others.length && (host || S.config?.showPaymentToTeam!==false)){
+    html += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Thành viên đã đặt (${others.length})</h2>`;
+    const shown = host ? filterList(others) : others;
+    if (host) html += filterChips();
+    html += shown.map(o=>memberCard(o, host)).join("") || `<p class="muted">Không có đơn nào ở mục này.</p>`;
+    html += `</div>`;
+  }
+  if (host) html += `<div class="pad" style="text-align:center;margin-top:18px"><button class="link red" data-a="delete-group">Xoá đơn hàng nhóm</button></div>`;
+  return `<div class="page">${html}</div>`;
+}
+function cartGroups(c){
+  const self={id:null,name:(c.name.trim()||"Bạn")+" (bạn)",items:[]}, gs=[self,...c.guests.map(g=>({id:g.id,name:g.name,items:[]}))];
+  c.items.forEach((it,i)=>{ (gs.find(g=>g.id===(it.for||null))||self).items.push({it,i}); });
+  return gs.filter(g=>g.id!==null || g.items.length || !c.guests.length);
+}
+function myOrderCard(o){
+  const [l,cls]=statusOf(o), locked=isLocked();
+  return `<div class="card"><div class="mem-head"><span class="avatar">${esc(o.name.trim()[0]||"?")}</span><div class="nm">${esc(o.name)}${o.guests?.length?`<div class="small muted" style="font-weight:500">${esc(guestsNote(o))}</div>`:""}</div><span class="badge ${cls}">${l}</span></div>
+    ${groupedLines(o)}
+    <div class="between" style="border-top:1px solid var(--line);padding-top:10px"><b>${o.guests?.length?`Tổng cho ${o.guests.length+1} người`:"Tổng"}</b><b class="num" style="font-size:18px">${money(o.total)}</b></div>
+    ${(!locked||S.canEdit)?`<div class="row" style="margin-top:12px"><button class="btn" data-a="edit-own">Sửa đơn</button><button class="btn danger" data-a="cancel-own">Huỷ đơn</button></div>`:`<p class="small muted" style="margin:10px 0 0">Đơn đã chốt, liên hệ trưởng nhóm nếu cần thay đổi.</p>`}</div>`;
+}
+function payBlock(o){
+  let b="";
+  if (o.payMethod==="transfer"){
+    if (o.payStatus==="confirmed") b=`<p>Trưởng nhóm đã xác nhận nhận được tiền. Cảm ơn bạn!</p>`;
+    else b = qrPanel(o) + (o.payStatus==="claimed" ? `<div class="note" style="margin-top:12px">Bạn đã báo chuyển khoản. Đang chờ trưởng nhóm xác nhận.</div>` : "");
+  } else if (o.payMethod==="cash") b = o.payStatus==="confirmed" ? `<p>Trưởng nhóm đã nhận tiền mặt của bạn.</p>` : `<div class="note">Nhớ đưa <b class="num">${money(o.total)}</b> tiền mặt cho trưởng nhóm nhé.</div>`;
+  else b = `<div class="note">Phần của trưởng nhóm, không cần thanh toán.</div>`;
+  const bar = o.payMethod==="transfer" && o.payStatus==="unpaid" ? `<div class="bottom"><div class="in"><button class="cta" data-a="claim" ${S.busy?"disabled":""}>Tôi đã chuyển khoản ${money(o.total)}</button></div></div>` : "";
+  return `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Thanh toán</h2>${b}</div>${bar}`;
+}
+function qrPanel(o){
+  const c=S.config; if(!c?.accountNo) return `<p class="err">Trưởng nhóm chưa nhập tài khoản ngân hàng.</p>`;
+  const info=transferInfo(curDate(), o.name), svg=qrSvg(vietqr(c.bankBin,c.accountNo,o.total,info));
+  return `<div class="qrbox">${svg?`<div class="qr" aria-label="Mã QR chuyển khoản">${svg}</div>`:""}<div class="kv">
+    <div><span>Ngân hàng</span><b>${esc(c.bankName||c.bankBin)}</b></div>
+    <div><span>Số tài khoản</span><b class="num">${esc(c.accountNo)}</b><button class="btn" data-a="copy" data-t="${esc(c.accountNo)}">Copy</button></div>
+    <div><span>Chủ tài khoản</span><b>${esc(c.accountName||"")}</b></div>
+    <div><span>Số tiền</span><b class="num">${money(o.total)}</b><button class="btn" data-a="copy" data-t="${Math.round(o.total)}">Copy</button></div>
+    <div><span>Nội dung</span><b>${esc(info)}</b><button class="btn" data-a="copy" data-t="${esc(info)}">Copy</button></div></div></div>
+    <p class="small muted">Mở app ngân hàng và quét QR (hoặc chụp màn hình rồi chọn ảnh QR trong app). Số tiền và nội dung đã điền sẵn.</p>`;
+}
+function memberCard(o, host){
+  const [l,cls]=statusOf(o);
+  let acts="";
+  if (host){
+    if (o.payMethod==="transfer"&&o.payStatus!=="confirmed") acts+=`<button class="btn pri" data-a="row-ok" data-v="${esc(o.docId)}">Xác nhận đã nhận</button>`;
+    else if (o.payMethod==="cash"&&o.payStatus!=="confirmed") acts+=`<button class="btn pri" data-a="row-ok" data-v="${esc(o.docId)}">Đã thu tiền</button>`;
+    else if (o.payMethod!=="host") acts+=`<button class="btn" data-a="row-undo" data-v="${esc(o.docId)}">Hoàn tác</button>`;
+    acts+=`<button class="btn" data-a="row-edit" data-v="${esc(o.docId)}">Sửa</button><button class="btn danger" data-a="row-del" data-v="${esc(o.docId)}">Xoá</button>`;
+  }
+  return `<div class="card"><div class="mem-head"><span class="avatar">${esc(o.name.trim()[0]||"?")}</span><div class="nm">${esc(o.name)}${o.guests?.length?`<div class="small muted" style="font-weight:500">${esc(guestsNote(o))}, trả tiền cho cả ${o.guests.length+1} người</div>`:""}</div><span class="badge ${cls}">${l}</span></div>
+    ${host ? groupedLines(o) + `<div class="between" style="border-top:1px solid var(--line);padding-top:10px"><span class="muted">Tổng</span><b class="num">${money(o.total)}</b></div>` : `<div class="small muted">${setsCount(o)} suất${o.guests?.length?`, gồm ${esc(guestsNote(o))}`:""}</div>`}
+    ${acts?`<div class="row" style="margin-top:12px">${acts}</div>`:""}</div>`;
+}
+function filterList(list){
+  if (S.filter==="cash") return list.filter(o=>o.payMethod==="cash"&&o.payStatus!=="confirmed");
+  if (S.filter==="unpaid") return list.filter(o=>o.payMethod!=="host"&&o.payStatus!=="confirmed");
+  return list;
+}
+const filterChips = () => `<div class="chipbar" role="group" aria-label="Lọc"><button data-a="filter" data-v="all" aria-pressed="${S.filter==="all"}">Tất cả</button><button data-a="filter" data-v="unpaid" aria-pressed="${S.filter==="unpaid"}">Chưa trả</button><button data-a="filter" data-v="cash" aria-pressed="${S.filter==="cash"}">Cần thu tiền mặt</button></div>`;
+function hostSummary(){
+  const s=S.session, list=ordersFor(curKey());
+  const totalSets=list.reduce((a,o)=>a+setsCount(o),0), totalMoney=list.reduce((a,o)=>a+o.total,0);
+  const portions={}, doubles={}, notes=[];
+  list.forEach(o=>o.sets.forEach(st=>{ const q=qtyOf(st); st.dishes.forEach(d=>portions[d.name]=(portions[d.name]||0)+d.portions*q); if(st.dishes.length===1) doubles[st.dishes[0].name]=(doubles[st.dishes[0].name]||0)+q; if(st.note) notes.push(`${st.for||o.name} (${q>1?q+"x ":""}${setLabel(st)}): ${st.note}`); }));
+  const people=[]; list.forEach(o=>groupSets(o).forEach(g=>people.push(`- ${g.who}${g.self?"":` (${o.name} đặt hộ)`}: ${g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [${st.note}]`:"")).join("; ")}`)));
+  const rows=Object.entries(portions).sort((a,b)=>b[1]-a[1]);
+  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n`+rows.map(([n,c])=>`- ${n}: ${c} phần${doubles[n]?` (có ${doubles[n]} suất gấp đôi)`:""}`).join("\n")+(notes.length?`\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"")+`\n\nTheo người (${people.length} người):\n`+people.join("\n");
+  const rec=list.filter(o=>o.payMethod!=="host"&&o.payStatus==="confirmed"), cash=list.filter(o=>o.payMethod==="cash"&&o.payStatus!=="confirmed"), tf=list.filter(o=>o.payMethod==="transfer"&&o.payStatus!=="confirmed");
+  const sum=a=>a.reduce((x,o)=>x+o.total,0), unpaid=[...tf,...cash];
+  const unpaidText=`Cơm ${fmtDate(s.date)}, còn chưa thanh toán:\n`+unpaid.map(o=>`- ${o.name}${o.guests?.length?` (gồm ${o.guests.join(", ")})`:""}: ${money(o.total)}${o.payMethod==="cash"?" (tiền mặt)":""}`).join("\n");
+  const closed=s.status==="closed";
+  return `<div class="pad">
+    <div class="card">
+      <div class="between"><b style="font-size:17px">Quản lý đơn nhóm</b><span class="badge ${isLocked()?"b-red":"b-grn"}">${closed?"Đã chốt":isLocked()?"Hết giờ":"Đang nhận đơn"}</span></div>
+      <div class="stats" style="margin-top:12px"><div class="stat"><small>Tổng suất</small><b class="num">${totalSets}</b></div><div class="stat"><small>Tổng tiền (${list.length} người)</small><b class="num">${money(totalMoney)}</b></div>
+        <div class="stat g"><small>Đã nhận</small><b class="num">${money(sum(rec))}</b></div><div class="stat o"><small>Tiền mặt cần thu (${cash.length})</small><b class="num">${money(sum(cash))}</b></div>
+        <div class="stat r" style="background:var(--surface);grid-column:1/-1"><small>Chuyển khoản chưa xác nhận (${tf.length})</small><b class="num">${money(sum(tf))}</b></div></div>
+      <details class="more" data-k="kitchen" ${S.open.kitchen?"open":""} style="margin-top:8px"><summary><span>Tổng món gửi quán</span>${I.chev}</summary>
+        ${rows.length?`<ul style="margin:0 0 10px;padding-left:18px">${rows.map(([n,c])=>`<li><b class="num">${c}</b> phần ${esc(n)}${doubles[n]?` <span class="small muted">(có ${doubles[n]} suất gấp đôi)</span>`:""}</li>`).join("")}</ul>`:`<p class="muted">Chưa có ai đặt.</p>`}</details>
+      <div class="row" style="margin-top:6px">
+        <button class="btn" data-a="copy" data-t="${esc(kitchen)}" ${list.length?"":"disabled"}>Copy tổng đơn gửi quán</button>
+        <button class="btn" data-a="copy" data-t="${esc(unpaidText)}" ${unpaid.length?"":"disabled"}>Copy DS chưa trả</button>
+        
+        ${closed?`<button class="btn" data-a="reopen">Mở lại</button>`:`<button class="btn dark" data-a="close">Chốt đơn</button>`}
+      </div>
+      <p class="small muted" style="margin:10px 0 0">Đối chiếu app ngân hàng theo nội dung <b>${esc(transferInfo(s.date,"").trim())} TÊN</b>, rồi bấm xác nhận ở từng thành viên.</p>
+    </div></div>`;
+}
+
+/* ---------- Create group (host) ---------- */
+function createView(){
+  ensureMd(); const md=S.md, c=S.config, live=md.mode==="edit";
+  const q=norm(S.libQ);
+  const lib=S.dishes.filter(d=>!q||norm(d.nameVi).includes(q)||norm(d.nameEn).includes(q)).sort((a,b)=>(b.timesUsed||0)-(a.timesUsed||0)||String(b.lastUsed||"").localeCompare(String(a.lastUsed||"")));
+  const inMenu=id=>md.items.some(x=>x.id===id);
+  const last=S.recent.find(r=>r.id!==curKey()&&r.menu?.length);
+  const ai=S.ai;
+  const until=hhmm(Date.now()+md.minutes*60000);
+  const bankLine = c?.accountNo ? `Chuyển khoản về ${esc(c.bankName||"")} ${esc(String(c.accountNo).slice(-4).padStart(8,"•"))} hoặc tiền mặt. ${money(c.pricePerSet||35000)} / suất 2 món.` : `<span class="err">Chưa có tài khoản nhận tiền. Bấm để thiết lập.</span>`;
+  return `<div class="page">${topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close")}
+    <div class="pad">
+      <div class="grid" style="display:grid;gap:12px;margin-top:4px">
+        <div><label class="f" for="md-host">Tên trưởng nhóm</label><input type="text" id="md-host" data-f="md-host" value="${esc(md.hostName)}" placeholder="VD: Nguyễn" maxlength="40"></div>
+        <div><label class="f" for="md-shop">Tên quán (không bắt buộc)</label><input type="text" id="md-shop" data-f="md-shop" value="${esc(md.shopName)}" placeholder="VD: Cơm nhà Út" maxlength="60"></div>
+      </div>
+      <div class="setting" style="border-top:1px solid var(--line);margin-top:16px">${I.bill}<div class="t"><b>Chia hoá đơn với các thành viên</b><small>${bankLine}</small></div><button class="icon soft" data-a="go" data-v="bank" aria-label="Sửa tài khoản">${I.pen}</button></div>
+      <div class="setting">${I.clock}<div class="t"><b>Giới hạn thời gian</b><small>Chốt đơn lúc ${until}${live?" (tính lại từ bây giờ)":""}</small></div><div class="stepper"><button class="icon soft" data-a="md-min" data-v="-5" aria-label="Giảm 5 phút">${I.minus}</button><b class="num">${md.minutes} phút</b><button class="icon soft" data-a="md-min" data-v="5" aria-label="Tăng 5 phút">${I.plus}</button></div></div>
+      <div class="setting">${I.cal}<div class="t"><b>Tự động chốt đơn</b><small>${md.autoClose?`Sau ${md.minutes} phút không ai đặt thêm được`:"Bạn tự bấm Chốt đơn khi đủ người"}</small></div><button class="toggle" role="switch" aria-checked="${md.autoClose}" data-a="md-auto" aria-label="Tự động chốt đơn"></button></div>
+    </div>
+    <div class="band"></div>
+    <div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
+      ${S.imagesOK?`<p class="small muted" style="margin:0 0 10px">Tải ảnh menu quán gửi, Claude sẽ tự đọc ra danh sách món.</p>
+      <div class="drop" id="drop" data-a="pick-file" tabindex="0" role="button" aria-label="Chọn ảnh menu">
+        ${ai?.busy?`<b><span class="spin"></span> Claude đang đọc menu…</b><div class="small muted">Thường mất 10 đến 30 giây</div>`:`<b>Tải ảnh menu</b><div class="small muted">Bấm để chọn ảnh, kéo thả, hoặc dán (Ctrl+V)</div>`}
+        ${ai?.preview?`<img src="${ai.preview}" alt="Ảnh menu vừa tải">`:""}</div>
+      ${ai?.msg?`<p class="small">${esc(ai.msg)}</p>`:""}${ai?.err?`<p class="small err">${esc(ai.err)}</p>`:""}
+      <input type="file" id="file" accept="image/*" hidden>`:`<p class="small muted">Đọc ảnh menu bằng AI chưa hỗ trợ ở bản này. Hãy chọn từ thư viện món cũ hoặc dán text.</p>`}
+      <details class="more" data-k="lib" ${S.open.lib!==false?"open":""}><summary><span>Chọn món đã từng có (${S.dishes.length})</span>${I.chev}</summary>
+        ${last?`<button class="btn" data-a="md-copy-last" style="margin-bottom:8px">Copy thực đơn ${esc(fmtDate(last.date))}</button>`:""}
+        ${S.dishes.length?`<input type="search" id="lib-q" data-f="lib-q" value="${esc(S.libQ)}" placeholder="Tìm món…">
+        <div class="lib">${lib.map(d=>`<button class="opt" role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}"><span class="t"><b>${esc(d.nameVi)}</b><small>${d.nameEn?esc(d.nameEn)+", ":""}đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
+      </details>
+      <details class="more" data-k="text" ${S.open.text?"open":""}><summary><span>Dán text menu</span>${I.chev}</summary>
+        <textarea id="md-text" data-f="md-text" placeholder="Mỗi dòng một món">${esc(md.text||"")}</textarea>
+        <div class="row" style="margin-top:8px"><button class="btn" data-a="md-text-add">Thêm vào thực đơn</button><button class="btn" data-a="md-add-one">+ Thêm 1 món trống</button></div>
+      </details>
+      <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
+      ${md.items.map((x,i)=>`<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
+        <button class="btn ${x.soldOut?"danger":""}" data-a="md-out" data-i="${i}">${x.soldOut?"Hết món":"Còn"}</button><button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button>
+        <input type="text" class="en" id="mde-${i}" data-f="md-en" data-i="${i}" value="${esc(x.nameEn||"")}" placeholder="Tên tiếng Anh (tuỳ chọn)" aria-label="Tên tiếng Anh món ${i+1}"></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+    </div>
+    <div class="bottom"><div class="in"><button class="cta" data-a="publish" ${S.busy||!md.items.length?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${live?"Cập nhật đơn hàng nhóm":"Tạo đơn hàng nhóm"}</button></div></div>
+  </div>`;
+}
+function bankView(){
+  if (!S.sf){ const c=S.config||{}; S.sf={bankBin:c.bankBin||"970436",bankName:c.bankName||"Vietcombank",accountNo:c.accountNo||"",accountName:c.accountName||"",pricePerSet:c.pricePerSet||35000,hostPays:c.hostPays!==false,showPaymentToTeam:c.showPaymentToTeam!==false,shareUrl:c.shareUrl||ARTIFACT_URL}; }
+  const f=S.sf, known=BANKS.some(b=>b[1]===f.bankBin);
+  const preview = f.accountNo && /^\d{6}$/.test(f.bankBin) ? qrSvg(vietqr(f.bankBin,f.accountNo.trim(),0,"")) : "";
+  return `<div class="page">${topbar("Chia hoá đơn", "Tài khoản nhận tiền và cài đặt", "back", "", S.bankReturn||"home")}<div class="pad">
+    <div style="display:grid;gap:12px">
+      <div><label class="f" for="s-bank">Ngân hàng</label><select id="s-bank" data-f="s-bank">${BANKS.map(b=>`<option value="${b[1]}" ${b[1]===f.bankBin?"selected":""}>${esc(b[0])}</option>`).join("")}<option value="other" ${!known?"selected":""}>Ngân hàng khác (nhập mã BIN)</option></select></div>
+      ${!known?`<div><label class="f" for="s-bin">Mã BIN ngân hàng (6 số)</label><input type="text" id="s-bin" data-f="s-bin" inputmode="numeric" value="${esc(f.bankBin)}"></div>`:""}
+      <div><label class="f" for="s-acc">Số tài khoản</label><input type="text" id="s-acc" data-f="s-acc" inputmode="numeric" value="${esc(f.accountNo)}"></div>
+      <div><label class="f" for="s-name">Tên chủ tài khoản</label><input type="text" id="s-name" data-f="s-name" value="${esc(f.accountName)}" placeholder="NGUYEN VAN A"></div>
+    </div>
+    ${preview?`<div class="qrbox" style="margin-top:14px"><div class="qr">${preview}</div><p class="small muted kv">Quét thử bằng app ngân hàng. Nếu hiện đúng tên chủ tài khoản là thông tin chính xác.</p></div>`:""}
+    <div class="band" style="margin:18px -20px"></div>
+    <label class="f" for="s-price">Giá 1 suất 2 món</label><input type="number" id="s-price" data-f="s-price" min="1000" step="500" value="${esc(f.pricePerSet)}" style="max-width:200px">
+    <p class="small muted">1 món (gấp đôi) và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới.</p>
+    <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của bạn (chủ trang) ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
+    <div class="setting"><div class="t"><b>Cho cả team xem ai đã thanh toán</b><small>Chỉ hiện tên và trạng thái, không hiện món và số tiền</small></div><button class="toggle" role="switch" aria-checked="${f.showPaymentToTeam}" data-a="s-toggle" data-v="showPaymentToTeam"></button></div>
+    <label class="f" for="s-url" style="margin-top:8px">Link chia sẻ cho team</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
+  </div>
+  <div class="bottom"><div class="in"><button class="cta" data-a="save-settings" ${S.busy?"disabled":""}>Lưu</button></div></div></div>`;
+}
+
+/* ================= Events ================= */
+function ask(msg, ok="Đồng ý", danger=false){ return new Promise(res=>{ S.sheet={kind:"confirm",msg,ok,danger,res}; render(); }); }
+function closeAsk(v){ const sh=S.sheet; if(sh?.kind==="confirm"){ S.sheet=null; render(); sh.res(v); return true; } return false; }
+function go(v){ if(v==="home" && S.viewKey){ S.viewKey=null; S.cart=null; setTimeout(watchSession,0); } if(v==="bank") S.bankReturn = S.view==="create"?"create":"home"; S.view=v; S.sheet=null; if(v!=="bank") S.sf=null; if(v==="home"&&S.md) S.md=null; window.scrollTo({top:0}); }
+async function onClick(e){
+  const b=e.target.closest("[data-a]"); if(!b||b.disabled) return;
+  const a=b.dataset.a, v=b.dataset.v, i=Number(b.dataset.i), date=curKey();
+  if (a==="ask-ok"){ closeAsk(true); return; }
+  if (a==="ask-no"){ closeAsk(false); return; }
+  if (S.sheet?.kind==="confirm") return;
+  switch(a){
+    case "go": go(v); break;
+    case "create": {
+      if (v!=="edit" && S.session && S.session.date===todayStr() && S.session.status!=="closed" && !S.viewKey){
+        const n=ordersFor(curKey()).length;
+        if (!(await ask(`Tạo đơn nhóm mới? Đơn nhóm hiện tại${n?` (${n} người đã đặt)`:""} sẽ được chốt lại khi bạn tạo xong đơn mới. Bạn vẫn xem lại và thu tiền được ở mục Đơn nhóm gần đây.`, "Tạo đơn nhóm mới"))) return;
+      }
+      S.md=null; ensureMd(v==="edit"?"edit":"new");
+      if(!S.config){ S.bankReturn="create"; S.view="bank"; toast("Thiết lập tài khoản nhận tiền trước nhé"); } else S.view="create";
+      window.scrollTo({top:0}); break; }
+    case "view-sess": S.viewKey = v===S.config?.current ? null : v; S.cart=null; watchSession(); S.view="cart"; window.scrollTo({top:0}); break;
+    case "back-current": S.viewKey=null; S.cart=null; watchSession(); S.view="home"; break;
+    case "share": S.sheet={kind:"share"}; break;
+    case "sh-close": S.sheet=null; break;
+    case "copy": copyText(b.dataset.t); return;
+    case "copy-invite": copyText(shareMsg(), "Đã copy tin nhắn mời, dán vào nhóm chat nhé"); return;
+    case "share-app": {
+      const link=shareLink(), msg=shareMsg(), enc=encodeURIComponent;
+      if (v==="native"){ try{ await navigator.share({title:"Cơm trưa team", text:msg}); }catch(err){ if(err?.name!=="AbortError") copyText(msg,"Không mở được bảng chia sẻ. Đã copy tin nhắn, hãy dán vào nhóm chat"); } return; }
+      const names={zalo:"Zalo",teams:"Teams",facebook:"Facebook"};
+      if (v==="zalo"){
+        const android=/Android/i.test(navigator.userAgent);
+        const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+        await copyText(msg, android ? "Đang mở Zalo… (tin nhắn cũng đã được copy)" : ios ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
+        if (!android && !ios){ try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{} }
+        if (android){
+          const intent = "intent:#Intent;action=android.intent.action.SEND;type=text/plain;package=com.zing.zalo;S.android.intent.extra.TEXT="+enc(msg)+";end";
+          let w=null; try{ w=window.open(intent, "_blank"); }catch{}
+          if (!w){ try{ const a=document.createElement("a"); a.href=intent; a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove(); }catch{} }
+        }
+        return;
+      }
+      await copyText(msg, `Đã copy tin nhắn. Mở ${names[v]} và dán vào nhóm`);
+      const url = v==="teams" ? `https://teams.microsoft.com/share?href=${enc(link)}&msgText=${enc(msg)}` : v==="facebook" ? `https://www.facebook.com/sharer/sharer.php?u=${enc(link)}` : "";
+      if (url){ try{ window.open(url, "_blank", "noopener"); }catch{} }
+      return; }
+    case "add": { if(!ensureCart()) return; const per={}; sheetPeople().forEach(p=>per[p.id]={picks:[],note:"",qty:1});
+      const g=S.cart.guests.find(g=>!S.cart.items.some(it=>it.for===g.id)); const active = g ? g.id : "self";
+      per[active].picks=[v]; S.sheet={kind:"item", index:null, per, active}; break; }
+    case "sh-tab": S.sheet.active=v; break;
+    case "proxy-open": if(!ensureCart()) return; S.sheet={kind:"proxy", names: S.cart.guests.length ? S.cart.guests.map(g=>g.name) : [""], err:null}; break;
+    case "px-n": { const n=S.sheet.names; if(Number(v)>0 && n.length<15) n.push(""); else if(Number(v)<0 && n.length>1) n.pop(); break; }
+    case "px-clear": S.cart.items=S.cart.items.filter(it=>!it.for); S.cart.guests=[]; S.sheet=null; toast("Đã bỏ đặt hộ"); break;
+    case "px-ok": {
+      const sh=S.sheet, names=sh.names.map(x=>x.trim());
+      if (names.some(x=>!x)){ sh.err="Nhập đủ tên cho từng người"; break; }
+      const lower=names.map(x=>norm(x));
+      if (new Set(lower).size!==lower.length){ sh.err="Có tên bị trùng, thêm ký tự để phân biệt (VD: Minh QA)"; break; }
+      if (S.cart.name.trim() && lower.includes(norm(S.cart.name))){ sh.err="Tên người được đặt hộ trùng với tên của bạn"; break; }
+      const old=S.cart.guests;
+      const guests=names.map((nm,k)=>({ id: old[k]?.id || "g"+rid(), name:nm }));
+      const keep=new Set(guests.map(g=>g.id));
+      S.cart.items=S.cart.items.filter(it=>!it.for || keep.has(it.for));
+      S.cart.guests=guests; S.sheet=null;
+      toast(`Đặt hộ ${guests.length} người. Bấm + ở món, rồi chọn món cho từng người theo tab tên`);
+      break; }
+    case "sh-pick": { const p=S.sheet.per[S.sheet.active].picks, k=p.indexOf(v); if(k>=0) p.splice(k,1); else p.push(v); break; }
+    case "sh-qty": { const x=S.sheet.per[S.sheet.active]; x.qty=Math.max(1,Math.min(20,x.qty+Number(v))); break; }
+    case "sh-add": { const sh=S.sheet;
+      const made=Object.entries(sh.per).filter(([,x])=>x.picks.length).map(([k,x])=>({picks:[...x.picks], names:{}, note:x.note.trim(), qty:x.qty, for: k==="self"?null:k}));
+      if (!made.length) return;
+      if (sh.index!=null) S.cart.items[sh.index]={...S.cart.items[sh.index], ...made[0]}; else S.cart.items.push(...made);
+      S.sheet=null; toast(sh.index!=null?"Đã cập nhật":`Đã thêm ${made.length>1?made.length+" suất ":""}vào giỏ hàng`); break; }
+    case "sh-remove": S.cart.items.splice(S.sheet.index,1); S.sheet=null; break;
+    case "edit-item": { const it=S.cart.items[i], k=it.for||"self"; S.sheet={kind:"item", index:i, active:k, per:{[k]:{picks:[...it.picks], note:it.note, qty:it.qty}}}; break; }
+    case "del-item": S.cart.items.splice(i,1); break;
+    case "pay": S.cart.payMethod=v; break;
+    case "submit": submitCart(); return;
+    case "cancel-cart": { const other=S.cart?.docId!==S.uid; S.cart=null; if(other) S.view="cart"; break; }
+    case "edit-own": S.cart=newCart(S.uid, mine()); break;
+    case "cancel-own": if(!(await ask("Huỷ đơn của bạn trong đơn nhóm này?","Huỷ đơn",true))) return; try{ await mutateOrder(S.uid,date,()=>null); toast("Đã huỷ đơn"); }catch(err){ writeErr(err); } S.cart=null; break;
+    case "claim": S.busy=true; render(); await setPay(S.uid,{payStatus:"claimed"}); S.busy=false; toast("Đã báo trưởng nhóm"); break;
+    case "row-ok": await setPay(v,{payStatus:"confirmed"}); break;
+    case "row-undo": await setPay(v,{payStatus:"unpaid"}); break;
+    case "row-del": { const o=S.orders[v]?.days?.[date]; if(!(await ask(`Xoá đơn của ${o?.name||"người này"}?`,"Xoá đơn",true))) return; try{ await mutateOrder(v,date,()=>null); toast("Đã xoá đơn"); }catch(err){ writeErr(err); } break; }
+    case "row-edit": { const o=S.orders[v]?.days?.[date]; if(!o) return; S.cart=newCart(v,o,v!==S.uid); window.scrollTo({top:0}); break; }
+    case "proxy": S.cart=newCart("proxy-"+rid(), null, true); S.view="home"; toast("Chọn món cho người được đặt hộ"); window.scrollTo({top:0}); break;
+    case "filter": S.filter=v; break;
+    case "close": try{ await S.db.doc("sessions/"+date).update({status:"closed"}); toast("Đã chốt đơn"); }catch(err){ writeErr(err); } break;
+    case "reopen": try{ await S.db.doc("sessions/"+date).update({status:"open", autoClose:false}); toast("Đã mở lại, tự chốt đã tắt"); }catch(err){ writeErr(err); } break;
+    case "delete-group": if(!(await ask("Xoá đơn hàng nhóm này? Mọi người sẽ không vào đặt được nữa.","Xoá đơn hàng nhóm",true))) return;
+      try{ if (S.config?.current===date) await S.db.doc("config/main").update({current:null}); await S.db.doc("sessions/"+date).delete(); S.viewKey=null; curSess=undefined; watchSession(); S.cart=null; go("home"); toast("Đã xoá đơn hàng nhóm"); }catch(err){ writeErr(err); } break;
+    case "pick-file": document.getElementById("file")?.click(); return;
+    case "md-min": S.md.minutes=Math.max(5,Math.min(600,S.md.minutes+Number(v))); break;
+    case "md-auto": S.md.autoClose=!S.md.autoClose; break;
+    case "md-lib": { const d=S.dishes.find(x=>x.id===v), k=S.md.items.findIndex(x=>x.id===v); if(k>=0) S.md.items.splice(k,1); else if(d) S.md.items.push({id:d.id,nameVi:d.nameVi,nameEn:d.nameEn||"",soldOut:false}); break; }
+    case "md-copy-last": { const last=S.recent.find(r=>r.id!==curKey()&&r.menu?.length); let n=0; last?.menu.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi,nameEn:x.nameEn||"",soldOut:false}); n++; } }); toast(`Đã thêm ${n} món`); break; }
+    case "md-text-add": { let n=0; String(S.md.text||"").split(/\n/).map(l=>l.replace(/^[\s\-•*\d.)]+/,"").trim()).filter(Boolean).forEach(l=>{ if(addDraftItem(l)) n++; }); S.md.text=""; toast(`Đã thêm ${n} món`); break; }
+    case "md-add-one": S.md.items.push({id:null,nameVi:"",nameEn:"",soldOut:false}); break;
+    case "md-del": S.md.items.splice(i,1); break;
+    case "md-out": S.md.items[i].soldOut=!S.md.items[i].soldOut; break;
+    case "md-clear": if(!(await ask("Xoá hết món trong thực đơn đang soạn?","Xoá hết",true))) return; S.md.items=[]; break;
+    case "publish": publishGroup(); return;
+    case "s-toggle": S.sf[v]=!S.sf[v]; break;
+    case "save-settings": {
+      const f=S.sf;
+      if (!/^\d{6}$/.test(f.bankBin)){ toast("Mã BIN ngân hàng phải gồm 6 số"); return; }
+      if (!/^[0-9A-Za-z]{4,19}$/.test(f.accountNo.trim())){ toast("Số tài khoản không hợp lệ"); return; }
+      S.busy=true; render();
+      // Bỏ query string khỏi link chia sẻ team để không lỡ lưu nhầm ?manage=... (token host) vào đó.
+      const cleanShareUrl = ((f.shareUrl||"").trim() || ARTIFACT_URL).split("?")[0].split("#")[0];
+      try{ await S.db.doc("config/main").set({...(clone(S.config)||{}), bankBin:f.bankBin, bankName:f.bankName, accountNo:f.accountNo.trim(), accountName:ascii(f.accountName), pricePerSet:Number(f.pricePerSet)||35000, hostPays:f.hostPays, showPaymentToTeam:f.showPaymentToTeam, shareUrl:cleanShareUrl}); toast("Đã lưu"); S.sf=null; S.view=S.bankReturn||"home"; }catch(err){ writeErr(err); }
+      S.busy=false; break; }
+    default: return;
+  }
+  render();
+}
+app.addEventListener("click", onClick); overlay.addEventListener("click", onClick);
+function onInput(e){
+  const t=e.target, f=t.dataset.f; if(!f) return; const i=Number(t.dataset.i);
+  switch(f){
+    case "c-name": S.cart.name=t.value; break;
+    case "sh-note": S.sheet.per[S.sheet.active].note=t.value; return;
+    case "px": S.sheet.names[i]=t.value; return;
+    case "md-host": S.md.hostName=t.value; return;
+    case "md-shop": S.md.shopName=t.value; return;
+    case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; return;
+    case "md-en": S.md.items[i].nameEn=t.value; return;
+    case "md-text": S.md.text=t.value; return;
+    case "lib-q": S.libQ=t.value; break;
+    case "s-acc": S.sf.accountNo=t.value; break;
+    case "s-name": S.sf.accountName=t.value; return;
+    case "s-bin": S.sf.bankBin=t.value.trim(); break;
+    case "s-price": S.sf.pricePerSet=t.value; return;
+    case "s-url": S.sf.shareUrl=t.value; return;
+    default: return;
+  }
+  render();
+}
+app.addEventListener("input", onInput); overlay.addEventListener("input", onInput);
+app.addEventListener("change", e=>{
+  const t=e.target;
+  if (t.id==="file"){ readMenuImage(t.files?.[0]); t.value=""; return; }
+  if (t.dataset.f==="s-bank"){ if(t.value==="other"){ S.sf.bankBin=""; S.sf.bankName="Ngân hàng khác"; } else { S.sf.bankBin=t.value; S.sf.bankName=BANKS.find(b=>b[1]===t.value)?.[0]||""; } render(); }
+});
+app.addEventListener("toggle", e=>{ const d=e.target; if(d?.dataset?.k) S.open[d.dataset.k]=d.open; }, true);
+app.addEventListener("keydown", e=>{ if(e.target.id==="drop"&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); document.getElementById("file")?.click(); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"&&S.sheet){ if(!closeAsk(false)){ S.sheet=null; render(); } } });
+app.addEventListener("dragover", e=>{ const d=e.target.closest?.("#drop"); if(d){ e.preventDefault(); d.classList.add("over"); } });
+app.addEventListener("dragleave", e=>{ const d=e.target.closest?.("#drop"); if(d) d.classList.remove("over"); });
+app.addEventListener("drop", e=>{ const d=e.target.closest?.("#drop"); if(!d) return; e.preventDefault(); d.classList.remove("over"); readMenuImage(e.dataTransfer?.files?.[0]); });
+document.addEventListener("paste", e=>{ if(!(S.canEdit&&S.view==="create")) return; const it=[...(e.clipboardData?.items||[])].find(x=>x.type.startsWith("image/")); if(it){ e.preventDefault(); readMenuImage(it.getAsFile()); } });
+setInterval(()=>{ if(S.session && !S.sheet) render(); }, 60000);
+
+/* ================= Boot ================= */
+let unSess=null, curSess;
+function watchSession(){
+  const id=S.viewKey||S.config?.current||null; if(id===curSess) return; curSess=id; S.sessKey=id;
+  unSess?.(); S.session=null;
+  if(!id){ S.sessLoaded=true; render(); return; }
+  S.sessLoaded=false;
+  unSess=S.db.doc("sessions/"+id).onSnapshot(s=>{ S.session=s.exists?s.data():null; S.sessLoaded=true; render(); }, err=>{ console.error(err); S.sessLoaded=true; render(); });
+}
+(async function boot(){
+  if (!window.SupabaseAdapter){ render(); return; }
+  const {db,user,sample}=window.SupabaseAdapter;
+  S.db=db; S.sample=sample; S.imagesOK=false; // đọc ảnh AI chưa khả dụng trong bản Supabase, xem PROJECT_HANDOFF.md
+  if (user) [S.uid,S.canEdit,S.isOwner]=await Promise.all([user.id().catch(()=>null),user.canEdit().catch(()=>false),user.isOwner().catch(()=>false)]);
+  db.doc("config/main").onSnapshot(s=>{ S.config=s.exists?s.data():null; S.cfgLoaded=true; watchSession(); render(); }, err=>{ console.error(err); S.cfgLoaded=true; S.sessLoaded=true; render(); });
+  db.collection("orders").onSnapshot(qs=>{ const m={}; qs.docs.forEach(d=>m[d.id]=d.data()); S.orders=m; S.ordersLoaded=true; render(); }, err=>{ console.error(err); S.ordersLoaded=true; render(); });
+  if (S.canEdit){
+    db.collection("dishes").onSnapshot(qs=>{ S.dishes=qs.docs.map(d=>({id:d.id,...d.data()})); render(); }, console.error);
+    db.collection("sessions").orderBy("createdAt","desc").limit(12).onSnapshot(qs=>{ S.recent=qs.docs.map(d=>({id:d.id,...d.data()})); render(); }, console.error);
+  }
+  render();
+})();
+</script>
+</body>
+</html>
