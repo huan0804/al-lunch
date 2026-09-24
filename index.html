@@ -76,7 +76,8 @@ h2.sec{font-size:21px;font-weight:800;margin:0 0 4px}
 .bottom .in{max-width:528px;margin:0 auto}
 .cta{width:100%;border:0;border-radius:999px;background:var(--brand);color:var(--brand-ink);font-weight:700;font-size:17px;padding:16px 20px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
 .cta.split{justify-content:space-between}
-.cta[disabled]{background:var(--gray-soft);color:var(--muted);cursor:not-allowed}
+.cta[disabled]{background:var(--line);color:var(--muted);cursor:not-allowed;opacity:.75}
+.hint{text-align:center;color:var(--chili);font-size:13px;margin-top:8px;font-weight:600}
 .hint{text-align:center;font-size:13px;color:var(--chili);margin-top:8px}
 
 /* generic */
@@ -121,6 +122,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand)}
 .opt .t{flex:1}
 .opt .t b{display:block;font-weight:600}
 .opt .t small{color:var(--muted);font-size:13px}
+.bank-logo{width:28px;height:28px;border-radius:6px;object-fit:contain;vertical-align:middle;margin-right:8px;background:var(--surface)}
+.opt .t:has(.bank-logo){display:flex;align-items:center}
+.bank-pick{display:flex;align-items:center;gap:10px;width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit}
+.bank-pick span{flex:1;font-weight:600}
+.bank-pick svg{flex:none}
 .radio,.cbox{width:22px;height:22px;border:2px solid #BDBDBD;flex:none;display:inline-flex;align-items:center;justify-content:center}
 .radio{border-radius:50%}
 .cbox{border-radius:6px}
@@ -555,11 +561,22 @@ function sheetView(){
   if (sh.kind==="share") return shareSheet();
   if (sh.kind==="proxy") return proxySheet(sh);
   if (sh.kind==="askname") return asknameSheet(sh);
+  if (sh.kind==="bankpick") return bankPickSheet(sh);
   if (sh.kind==="confirm") return `<div class="scrim" data-a="ask-no"></div><div class="sheet" role="alertdialog" aria-label="Xác nhận"><div class="grab"></div>
     <p style="font-size:17px;font-weight:600;margin:6px 0 20px">${esc(sh.msg)}</p>
     <button class="cta" data-a="ask-ok" ${sh.danger?'style="background:var(--chili);color:#fff"':""}>${esc(sh.ok)}</button>
     <button class="cta" data-a="ask-no" style="background:var(--surface);border:1.5px solid var(--line);margin-top:10px">Quay lại</button></div>`;
   return "";
+}
+function bankPickSheet(sh){
+  const q=norm(sh.q||"");
+  const list=BANKS.filter(b=>!q||norm(b[0]).includes(q));
+  return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Chọn ngân hàng">
+    <div class="grab"></div><div class="between"><h3>Chọn ngân hàng</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
+    <input type="search" id="bank-q" data-f="bank-q" value="${esc(sh.q||"")}" placeholder="Tìm ngân hàng…" autofocus>
+    <div class="lib" style="margin-top:10px">${list.map(b=>`<button class="opt" data-a="bank-pick" data-v="${b[1]}"><span class="t"><img class="bank-logo" src="https://api.vietqr.io/img/${b[1]}.png" alt="" onerror="this.style.display='none'"><b>${esc(b[0])}</b></span></button>`).join("")||`<p class="small muted">Không tìm thấy.</p>`}
+    <button class="opt" data-a="bank-pick" data-v="other"><span class="t"><b>Ngân hàng khác (nhập mã BIN)</b></span></button></div>
+  </div>`;
 }
 function asknameSheet(sh){
   return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Nhập tên">
@@ -658,12 +675,16 @@ function cartView(){
         : `<p class="muted" style="margin:6px 0">Chưa thêm món nào.</p>`}
       ${c.existing?`<button class="link red" data-a="cancel-cart" style="margin-top:8px">Huỷ thay đổi</button>`:""}
     </div>`;
-    html += `<div class="band" style="margin:18px -20px"></div><h2 class="sec" style="margin-bottom:6px">Thanh toán</h2>`;
-    if (c.guests.length && !hp) html += `<p class="small muted" style="margin:0 0 4px">Bạn thanh toán một lần cho cả ${c.guests.length+1} người: ${money(cartTotal(c))}.</p>`;
-    html += hp ? `<div class="note">Bạn là trưởng nhóm nên phần của bạn không cần thanh toán.</div>`
-      : `<div role="radiogroup" aria-label="Hình thức thanh toán">
+    // hp=true (trưởng nhóm tự trả): phần "Thanh toán" hoàn toàn thừa với
+    // chính họ, ẩn cả heading lẫn ghi chú thay vì hiện 1 khối chỉ để nói
+    // "không cần thanh toán" — tránh tạo khoảng cách/nội dung gây hiểu nhầm.
+    if (!hp){
+      html += `<div class="band" style="margin:18px -20px"></div><h2 class="sec" style="margin-bottom:6px">Thanh toán</h2>`;
+      if (c.guests.length) html += `<p class="small muted" style="margin:0 0 4px">Bạn thanh toán một lần cho cả ${c.guests.length+1} người: ${money(cartTotal(c))}.</p>`;
+      html += `<div role="radiogroup" aria-label="Hình thức thanh toán">
           <button class="opt" role="radio" aria-checked="${c.payMethod==="transfer"}" data-a="pay" data-v="transfer"><span class="t"><b>Chuyển khoản</b><small>Quét mã QR đã có sẵn số tiền</small></span><span class="radio"></span></button>
           <button class="opt" role="radio" aria-checked="${c.payMethod==="cash"}" data-a="pay" data-v="cash"><span class="t"><b>Tiền mặt</b><small>Đưa trực tiếp cho trưởng nhóm</small></span><span class="radio"></span></button></div>`;
+    }
     html += `<div class="between" style="margin-top:18px"><div><b style="font-size:18px">Tổng tạm tính</b><div class="small muted">${cartCount(c)} suất</div></div><b class="num" style="font-size:20px">${money(cartTotal(c))}</b></div></div>`;
     const err=validate(c);
     html += `<div class="bottom"><div class="in"><button class="cta" data-a="submit" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} Xác nhận đặt món</button>${err?`<div class="hint">${esc(err)}</div>`:""}</div></div>`;
@@ -700,7 +721,11 @@ function payBlock(o){
   let b="";
   if (o.payMethod==="transfer"){
     if (o.payStatus==="confirmed") b=`<p>Trưởng nhóm đã xác nhận nhận được tiền. Cảm ơn bạn!</p>`;
-    else b = qrPanel(o) + (o.payStatus==="claimed" ? `<div class="note" style="margin-top:12px">Bạn đã báo chuyển khoản. Đang chờ trưởng nhóm xác nhận.</div>` : "");
+    // "claimed": bạn đã báo xong, không cần quét QR lại nữa — chỉ còn chờ
+    // trưởng nhóm đối chiếu và xác nhận, nên KHÔNG hiện lại qrPanel() để
+    // tránh cảm giác "còn phải làm gì đó".
+    else if (o.payStatus==="claimed") b = `<div class="note" style="background:var(--ok-soft);color:var(--ok)"><b>Bạn đã hoàn tất phần của mình.</b><br>Đang chờ trưởng nhóm đối chiếu và xác nhận đã nhận tiền.</div>`;
+    else b = qrPanel(o);
   } else if (o.payMethod==="cash") b = o.payStatus==="confirmed" ? `<p>Trưởng nhóm đã nhận tiền mặt của bạn.</p>` : `<div class="note">Nhớ đưa <b class="num">${money(o.total)}</b> tiền mặt cho trưởng nhóm nhé.</div>`;
   else b = `<div class="note">Phần của trưởng nhóm, không cần thanh toán.</div>`;
   const bar = o.payMethod==="transfer" && o.payStatus==="unpaid" ? `<div class="bottom"><div class="in"><button class="cta" data-a="claim" ${S.busy?"disabled":""}>Tôi đã chuyển khoản ${money(o.total)}</button></div></div>` : "";
@@ -777,6 +802,7 @@ function createView(){
   const until=hhmm(Date.now()+md.minutes*60000);
   const bankKnown = BANKS.some(b=>b[1]===md.bankBin);
   const bankPreview = md.accountNo && /^\d{6}$/.test(md.bankBin) ? qrSvg(vietqr(md.bankBin, md.accountNo.trim(), 0, "")) : "";
+  const bankLogo = /^\d{6}$/.test(md.bankBin) ? `<img class="bank-logo" src="https://api.vietqr.io/img/${md.bankBin}.png" alt="" onerror="this.style.display='none'">` : "";
   const bankLine = md.accountNo ? `${esc(md.bankName||"")} ${esc(String(md.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
   const canClose = live || !!S.fixedSessKey; // link gốc tạo đơn mới: không có "trang trước" để đóng về
   return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
@@ -789,12 +815,12 @@ function createView(){
         <summary><span><b>Tài khoản nhận tiền</b> — ${bankLine}</span>${I.chev}</summary>
         <p class="small muted" style="margin:6px 0 10px">Tài khoản của bạn — chỉ dùng cho đơn này, tự điền sẵn lần sau trên máy này.</p>
         <div style="display:grid;gap:10px">
-          <div><label class="f" for="md-bank">Ngân hàng</label><select id="md-bank" data-f="md-bank">${BANKS.map(b=>`<option value="${b[1]}" ${b[1]===md.bankBin?"selected":""}>${esc(b[0])}</option>`).join("")}<option value="other" ${!bankKnown?"selected":""}>Ngân hàng khác (nhập mã BIN)</option></select></div>
+          <div><label class="f">Ngân hàng</label><button type="button" class="bank-pick" data-a="bank-pick-open">${bankLogo}<span>${bankKnown?esc(md.bankName):(md.bankBin?"Ngân hàng khác (BIN "+esc(md.bankBin)+")":"Chọn ngân hàng")}</span>${I.chev}</button></div>
           ${!bankKnown?`<div><label class="f" for="md-bin">Mã BIN ngân hàng (6 số)</label><input type="text" id="md-bin" data-f="md-bin" inputmode="numeric" value="${esc(md.bankBin)}"></div>`:""}
           <div><label class="f" for="md-acc">Số tài khoản</label><input type="text" id="md-acc" data-f="md-acc" inputmode="numeric" value="${esc(md.accountNo)}"></div>
           <div><label class="f" for="md-accname">Tên chủ tài khoản</label><input type="text" id="md-accname" data-f="md-accname" value="${esc(md.accountName)}" placeholder="NGUYEN VAN A"></div>
         </div>
-        ${bankPreview?`<div class="qrbox" style="margin-top:12px"><div class="qr">${bankPreview}</div><p class="small muted kv">Quét thử bằng app ngân hàng. Nếu hiện đúng tên chủ tài khoản là thông tin chính xác.</p></div>`:""}
+        ${bankPreview?`<div class="qrbox" style="margin-top:12px"><div class="qr">${bankPreview}</div></div>`:""}
       </details>
       <div class="setting">${I.clock}<div class="t"><b>Giới hạn thời gian</b><small>Chốt đơn lúc ${until}${live?" (tính lại từ bây giờ)":""}</small></div><div class="stepper"><button class="icon soft" data-a="md-min" data-v="-5" aria-label="Giảm 5 phút">${I.minus}</button><b class="num">${md.minutes} phút</b><button class="icon soft" data-a="md-min" data-v="5" aria-label="Tăng 5 phút">${I.plus}</button></div></div>
       <div class="setting">${I.cal}<div class="t"><b>Tự động chốt đơn</b><small>${md.autoClose?`Sau ${md.minutes} phút không ai đặt thêm được`:"Bạn tự bấm Chốt đơn khi đủ người"}</small></div><button class="toggle" role="switch" aria-checked="${md.autoClose}" data-a="md-auto" aria-label="Tự động chốt đơn"></button></div>
@@ -864,6 +890,11 @@ async function onClick(e){
       return; }
     case "share": S.sheet={kind:"share"}; break;
     case "sh-close": S.sheet=null; break;
+    case "bank-pick-open": S.sheet={kind:"bankpick", q:""}; break;
+    case "bank-pick": {
+      if (v==="other"){ S.md.bankBin=""; S.md.bankName="Ngân hàng khác"; }
+      else { S.md.bankBin=v; S.md.bankName=BANKS.find(b=>b[1]===v)?.[0]||""; }
+      S.sheet=null; break; }
     case "copy": copyText(b.dataset.t); return;
     case "copy-invite": copyText(shareMsg(), "Đã copy tin nhắn mời, dán vào nhóm chat nhé"); return;
     case "share-app": {
@@ -873,13 +904,18 @@ async function onClick(e){
       if (v==="zalo"){
         const android=/Android/i.test(navigator.userAgent);
         const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
-        await copyText(msg, android ? "Đang mở Zalo… (tin nhắn cũng đã được copy)" : ios ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
-        if (!android && !ios){ try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{} }
-        if (android){
-          const intent = "intent:#Intent;action=android.intent.action.SEND;type=text/plain;package=com.zing.zalo;S.android.intent.extra.TEXT="+enc(msg)+";end";
-          let w=null; try{ w=window.open(intent, "_blank"); }catch{}
-          if (!w){ try{ const a=document.createElement("a"); a.href=intent; a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove(); }catch{} }
+        // Android: package=com.zing.zalo ép mở thẳng Zalo qua Intent, nhưng Zalo
+        // không hiện màn chọn bạn/nhóm cho luồng đó (giới hạn của app Zalo, không
+        // sửa được từ code web). navigator.share() đi qua share sheet chuẩn của
+        // hệ điều hành — người dùng tự chọn Zalo từ đó, khả năng cao Zalo xử lý
+        // đúng luồng ACTION_SEND hơn. Không có API nào mở thẳng "màn chọn bạn của
+        // Zalo" mà bỏ qua share sheet hệ thống.
+        if (android && canNativeShare()){
+          try{ await navigator.share({title:"Cơm trưa team", text:msg}); return; }
+          catch(err){ if(err?.name==="AbortError") return; }
         }
+        await copyText(msg, android ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : ios ? "Đã copy tin nhắn. Mở Zalo và dán vào nhóm" : "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
+        if (!android && !ios){ try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{} }
         return;
       }
       await copyText(msg, `Đã copy tin nhắn. Mở ${names[v]} và dán vào nhóm`);
@@ -980,6 +1016,7 @@ function onInput(e){
     case "sh-note": S.sheet.per[S.sheet.active].note=t.value; return;
     case "px": S.sheet.names[i]=t.value; return;
     case "askname": S.sheet.name=t.value; return;
+    case "bank-q": S.sheet.q=t.value; break;
     case "md-host": S.md.hostName=t.value; return;
     case "md-shop": S.md.shopName=t.value; return;
     case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; return;
@@ -999,7 +1036,6 @@ app.addEventListener("input", onInput); overlay.addEventListener("input", onInpu
 app.addEventListener("change", e=>{
   const t=e.target;
   if (t.id==="file"){ readMenuImage(t.files?.[0]); t.value=""; return; }
-  if (t.dataset.f==="md-bank"){ if(t.value==="other"){ S.md.bankBin=""; S.md.bankName="Ngân hàng khác"; } else { S.md.bankBin=t.value; S.md.bankName=BANKS.find(b=>b[1]===t.value)?.[0]||""; } render(); }
 });
 app.addEventListener("toggle", e=>{ const d=e.target; if(d?.dataset?.k) S.open[d.dataset.k]=d.open; }, true);
 app.addEventListener("keydown", e=>{ if(e.target.id==="drop"&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); document.getElementById("file")?.click(); } });
