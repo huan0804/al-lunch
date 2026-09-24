@@ -8,23 +8,32 @@
 create extension if not exists pgcrypto; -- gen_random_bytes() cho order_token
 
 -- ---------- Bảng config (1 row duy nhất, id cố định) ----------
+-- CHỈ chứa cấu hình CHUNG cho toàn hệ thống (giá mặc định, tuỳ chọn thanh
+-- toán, domain). Thông tin ngân hàng nhận tiền KHÔNG nằm ở đây nữa — mỗi
+-- người tạo đơn nhận tiền vào tài khoản của chính họ, nên bank_bin/
+-- bank_name/account_no/account_name đã chuyển sang bảng sessions (mỗi
+-- session tự có bank riêng, xem bên dưới).
 create table if not exists config (
   id integer primary key default 1 check (id = 1), -- ép chỉ có 1 row
-  bank_bin text,
-  bank_name text,
-  account_no text,
-  account_name text,
   price_per_set integer not null default 35000,
   host_pays boolean not null default true,
   show_payment_to_team boolean not null default true,
   share_url text,
-  current_session_key text,
   updated_at timestamptz not null default now()
 );
--- Dọn cột host_pin_hash/host_token_hash còn sót lại từ các bản thiết kế
--- trước (PIN, rồi token cố định) — bản hiện tại không cần cột nào trong đó.
+-- Dọn các cột không còn dùng từ các bản thiết kế trước:
+-- host_pin_hash/host_token_hash (PIN, rồi token host cố định — đã bỏ),
+-- current_session_key ("1 đơn active toàn cục" — đã bỏ, giờ nhiều đơn
+-- tồn tại song song độc lập, mỗi đơn có sessions.manage_token riêng),
+-- bank_bin/bank_name/account_no/account_name (chuyển sang sessions —
+-- xem ghi chú trên).
 alter table config drop column if exists host_pin_hash;
 alter table config drop column if exists host_token_hash;
+alter table config drop column if exists current_session_key;
+alter table config drop column if exists bank_bin;
+alter table config drop column if exists bank_name;
+alter table config drop column if exists account_no;
+alter table config drop column if exists account_name;
 
 -- ---------- Bảng sessions (đơn nhóm theo ngày) ----------
 create table if not exists sessions (
@@ -38,19 +47,33 @@ create table if not exists sessions (
   host_name text,
   shop_name text,
   menu jsonb not null default '[]'::jsonb, -- [{id, nameVi, nameEn, soldOut}]
-  order_token text not null default encode(gen_random_bytes(12), 'hex'), -- link guest: ?order=<order_token>
+  bank_bin text, -- tài khoản nhận tiền CỦA NGƯỜI TẠO ĐƠN này (không dùng chung config nữa)
+  bank_name text,
+  account_no text,
+  account_name text,
+  order_token text not null default encode(gen_random_bytes(12), 'hex'), -- link guest (xem/đặt món): ?order=<order_token>
+  manage_token text not null default encode(gen_random_bytes(12), 'hex'), -- link quản lý (người tạo đơn): ?manage=<manage_token>
   created_at bigint not null -- epoch ms
 );
 create index if not exists sessions_date_idx on sessions (date desc);
--- Nếu bảng sessions đã tồn tại từ trước (thiếu cột order_token vì được
--- tạo bởi bản schema cũ hơn — "create table if not exists" bỏ qua toàn
--- bộ định nghĩa cột ở trên khi bảng đã có), thêm cột và điền giá trị cho
--- các session cũ TRƯỚC khi tạo unique index bên dưới (thứ tự bắt buộc:
--- index cần cột tồn tại và không null trước).
+-- Nếu bảng sessions đã tồn tại từ trước (thiếu các cột mới ở trên vì được
+-- tạo bởi bản schema cũ hơn — "create table if not exists" bỏ qua toàn bộ
+-- định nghĩa cột khi bảng đã có), thêm từng cột còn thiếu. Các cột bank_*
+-- nullable nên chỉ cần add column; order_token/manage_token NOT NULL nên
+-- cần thêm bước điền giá trị TRƯỚC khi tạo unique index bên dưới.
+alter table sessions add column if not exists bank_bin text;
+alter table sessions add column if not exists bank_name text;
+alter table sessions add column if not exists account_no text;
+alter table sessions add column if not exists account_name text;
 alter table sessions add column if not exists order_token text;
 update sessions set order_token = encode(gen_random_bytes(12), 'hex') where order_token is null;
 alter table sessions alter column order_token set not null;
 create unique index if not exists sessions_order_token_idx on sessions (order_token);
+
+alter table sessions add column if not exists manage_token text;
+update sessions set manage_token = encode(gen_random_bytes(12), 'hex') where manage_token is null;
+alter table sessions alter column manage_token set not null;
+create unique index if not exists sessions_manage_token_idx on sessions (manage_token);
 
 -- ---------- Bảng dishes (thư viện món) ----------
 create table if not exists dishes (
@@ -84,22 +107,30 @@ create index if not exists orders_session_idx on orders (session_key);
 -- ============================================================
 -- Row Level Security
 -- ============================================================
--- Mô hình quyền (đã chọn theo yêu cầu người dùng — ưu tiên đơn giản,
--- chấp nhận đánh đổi bảo mật cho nhóm nội bộ nhỏ, tin tưởng nhau):
+-- Mô hình quyền (đã chọn theo yêu cầu người dùng — nhiều đơn nhóm có thể
+-- tồn tại SONG SONG, mỗi đơn do một người tạo và quản lý riêng; ưu tiên
+-- đơn giản, chấp nhận đánh đổi bảo mật cho nhóm nội bộ nhỏ, tin tưởng nhau):
 --
---   - Link gốc  index.html                 → LUÔN là host, không cần xác
---     thực gì cả. Bất kỳ ai mở đúng URL gốc (domain Vercel) đều có toàn
---     quyền quản lý (sửa bank, tạo/sửa/xoá đơn nhóm, xác nhận thanh toán…).
---   - Link đơn  index.html?order=<order_token>  → guest dùng để xem menu
---     và đặt món cho ĐÚNG session đó. order_token sinh ngẫu nhiên mỗi khi
---     host tạo đơn nhóm mới (xem cột sessions.order_token), không đoán
---     được, nhưng KHÔNG có quyền quản lý.
+--   - Link gốc   index.html                        → LUÔN hiện màn "Tạo
+--     đơn nhóm mới" trống, không gắn với session nào. Bất kỳ ai mở URL
+--     gốc (domain Vercel) đều tạo được đơn mới.
+--   - Link quản lý  index.html?manage=<manage_token>  → sau khi tạo đơn,
+--     app chuyển sang link này (người tạo tự lưu/bookmark). Có toàn quyền
+--     quản lý ĐÚNG session đó (sửa thực đơn, xác nhận thanh toán, chốt/xoá
+--     đơn…) — KHÔNG quản lý được các session khác do người khác tạo.
+--   - Link đơn (guest)  index.html?order=<order_token>  → xem menu và đặt
+--     món cho ĐÚNG session đó, KHÔNG có quyền quản lý.
 --
--- Bảo mật của "quyền host" hoàn toàn dựa vào việc domain Vercel không bị
--- lộ ra ngoài nhóm — không có xác thực nào khác ở tầng ứng dụng. Người
--- dùng đã xác nhận chấp nhận đánh đổi này. Vì vậy KHÔNG cần RPC xác thực
--- (không còn PIN/token host như các bản thiết kế trước) — anon key được
--- quyền ghi trực tiếp vào config/sessions/dishes qua policy bên dưới.
+-- order_token và manage_token đều sinh ngẫu nhiên (96 bit) mỗi khi tạo
+-- session mới (xem sessions.order_token, sessions.manage_token), không
+-- đoán được. Bảo mật của "quyền quản lý 1 đơn" phụ thuộc vào việc không
+-- làm lộ link ?manage=... của đơn đó (khác gì làm lộ mật khẩu) — người
+-- dùng đã xác nhận chấp nhận đánh đổi này thay vì dùng Supabase Auth.
+-- Không có RPC xác thực nào — anon key ghi trực tiếp vào
+-- config/sessions/dishes/orders qua policy bên dưới; việc "đúng link mới
+-- sửa được đúng đơn" là do CLIENT tự lọc theo manage_token trong URL,
+-- không phải do RLS chặn ở tầng server (ai gọi thẳng Supabase API biết
+-- session key vẫn sửa được — chấp nhận được cho nhóm nội bộ tin tưởng nhau).
 --
 -- Vì không có Supabase Auth, ta cũng KHÔNG thể dùng auth.uid() để phân
 -- biệt "chủ đơn" ở tầng RLS cho bảng orders. Việc chỉ đúng chủ đơn mới
@@ -189,21 +220,21 @@ end $$;
 -- ============================================================
 -- Ghi chú bảo mật (đọc trước khi dùng thật với dữ liệu nhạy cảm)
 -- ============================================================
--- 1. KHÔNG có xác thực host ở tầng server. Bất kỳ ai biết domain Vercel
---    (dù không có link guest nào) đều có toàn quyền quản lý ngay khi mở
---    trang — kể cả sửa bank, xoá đơn nhóm, xem tất cả đơn của mọi người.
---    Đây là đánh đổi được người dùng chấp nhận cho đơn giản; domain Vercel
---    coi như bí mật tương đương "mật khẩu quản trị". KHÔNG đăng domain
---    này công khai (ví dụ trong README public, group chat lớn...).
--- 2. Muốn siết lại sau này: khôi phục lại RPC xác thực (PIN hoặc token)
---    đã bị drop ở trên — lịch sử các phiên bản trước còn trong git.
--- 3. order_token (link guest) sinh ngẫu nhiên 96 bit mỗi khi tạo session
---    mới, đủ khó đoán, nhưng CHỈ giới hạn được việc "xem/đặt món đúng
---    session" — guest không có quyền ghi vào config/sessions/dishes vì
---    UI không hiển thị các thao tác đó cho họ, nhưng RLS (orders_write,
---    config_write...) không tự phân biệt được host với guest ở tầng
---    server — ai gọi trực tiếp Supabase API (không qua UI) đều ghi được
---    vào mọi bảng. Chấp nhận được cho nhóm nội bộ tin tưởng nhau.
--- 4. Nâng cấp sau (không làm trong bản đầu): dùng Supabase Anonymous
---    Auth (auth.signInAnonymously()) để có auth.uid() thật + custom
---    claims phân biệt host/guest, rồi viết lại RLS chặt hơn.
+-- 1. KHÔNG có xác thực host ở tầng server, kể cả cho manage_token —
+--    verify hoàn toàn ở CLIENT (index.html đọc ?manage=... rồi tự so với
+--    sessions.manage_token qua 1 SELECT thường, không phải RPC bảo mật).
+--    Ai gọi thẳng Supabase REST API biết đúng session key hoặc đoán được
+--    manage_token đều ghi được vào session đó (và về lý thuyết vào MỌI
+--    session khác, vì RLS mở chung cho toàn bảng, không lọc theo token).
+--    Người dùng đã xác nhận chấp nhận đánh đổi này cho nhóm nội bộ.
+-- 2. Làm LỘ 1 link ?manage=... chỉ ảnh hưởng đơn đó (khác bản thiết kế
+--    "token host toàn cục" trước đây, nơi lộ 1 token ảnh hưởng mọi đơn).
+--    Đây là cải thiện so với thiết kế cũ, nhưng vẫn không phải access
+--    control thật ở tầng server.
+-- 3. Muốn siết lại sau này: khôi phục lại RPC xác thực (đã drop ở trên,
+--    lịch sử các phiên bản trước còn trong git) để verify manage_token
+--    qua security-definer function thay vì so sánh trực tiếp ở client.
+-- 4. Nâng cấp triệt để hơn (không làm trong bản đầu): dùng Supabase
+--    Anonymous Auth (auth.signInAnonymously()) để có auth.uid() thật +
+--    custom claims phân biệt ai quản lý session nào, rồi viết lại RLS
+--    chặt theo đúng session_key thay vì mở chung cho toàn bảng.

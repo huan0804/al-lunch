@@ -3,14 +3,16 @@
 // collection/onSnapshot, user, sample) chạy trên Supabase, để
 // index.html gần như không phải đổi phần UI/event logic.
 //
-// Mô hình quyền (theo yêu cầu người dùng — xem supabase-schema.sql để
-// biết đầy đủ lý do và đánh đổi):
-//   - Link gốc  index.html                        → AI mở cũng có toàn
-//     quyền quản lý (tạo/sửa đơn, xác nhận thanh toán...). Không cần
-//     đăng nhập/token gì cả — bảo mật dựa vào việc không public domain
-//     Vercel ra ngoài phạm vi những người được phép quản lý.
-//   - Link đơn  index.html?order=<order_token>     → chỉ xem/đặt món cho
-//     ĐÚNG session đó, giao diện tự ẩn các nút quản lý (S.canEdit=false).
+// Mô hình quyền (theo yêu cầu người dùng — nhiều đơn nhóm tồn tại SONG
+// SONG, mỗi đơn do 1 người tạo và quản lý riêng; xem supabase-schema.sql
+// để biết đầy đủ lý do và đánh đổi):
+//   - Link gốc  index.html                          → LUÔN là màn "Tạo
+//     đơn nhóm mới" trống, không gắn session nào. Ai mở cũng tạo được.
+//   - Link quản lý  index.html?manage=<manage_token>  → sau khi tạo đơn,
+//     app tự chuyển sang link này. Toàn quyền quản lý ĐÚNG session đó
+//     (S.canEdit=true CHỈ cho session này, không phải toàn cục).
+//   - Link đơn (guest)  index.html?order=<order_token> → chỉ xem/đặt món
+//     cho ĐÚNG session đó, không có quyền quản lý (S.canEdit=false).
 //
 // Cần nạp @supabase/supabase-js (UMD) TRƯỚC file này, và định nghĩa
 // window.SUPABASE_URL, window.SUPABASE_ANON_KEY trước khi load file này.
@@ -31,20 +33,24 @@
     return id;
   }
 
-  /* ---------- link đơn (?order=<order_token>) → không có quyền quản lý ---------- */
-  const orderToken = new URLSearchParams(location.search).get("order") || null;
-  const isGuestLink = !!orderToken;
+  /* ---------- link trên URL: ?manage=<manage_token> hoặc ?order=<order_token> ---------- */
+  const qs = new URLSearchParams(location.search);
+  const manageToken = qs.get("manage") || null;
+  const orderToken = qs.get("order") || null;
+  const isGuestLink = !!orderToken && !manageToken;
 
   /* ---------- map field: snake_case (DB) <-> camelCase (app) ---------- */
+  // CONFIG: cấu hình CHUNG toàn hệ thống. Bank KHÔNG còn ở đây — mỗi
+  // session tự có bank riêng của người tạo (xem SESSION_MAP).
   const CONFIG_MAP = {
-    bankBin:"bank_bin", bankName:"bank_name", accountNo:"account_no", accountName:"account_name",
     pricePerSet:"price_per_set", hostPays:"host_pays", showPaymentToTeam:"show_payment_to_team",
-    shareUrl:"share_url", current:"current_session_key"
+    shareUrl:"share_url"
   };
   const SESSION_MAP = {
     date:"date", status:"status", pricePerSet:"price_per_set", deadlineAt:"deadline_at",
     deadline:"deadline", autoClose:"auto_close", hostName:"host_name", shopName:"shop_name",
-    menu:"menu", createdAt:"created_at", orderToken:"order_token"
+    menu:"menu", createdAt:"created_at", orderToken:"order_token", manageToken:"manage_token",
+    bankBin:"bank_bin", bankName:"bank_name", accountNo:"account_no", accountName:"account_name"
   };
   const ORDER_MAP = {
     name:"name", guests:"guests", sets:"sets", total:"total", pricePerSet:"price_per_set",
@@ -89,13 +95,13 @@
           return;
         }
         if (coll==="sessions"){
-          // order_token: cột NOT NULL với DEFAULT ở DB, nhưng upsert() của
-          // PostgREST gửi tường minh mọi key của object — kể cả khi thiếu
-          // key này, một số đường upsert vẫn insert NULL thay vì để DEFAULT
-          // chạy. Sinh token ở client cho chắc. set() trong app chỉ dùng để
-          // TẠO session mới (bản sửa đơn cũ đi qua update(), không qua đây)
-          // nên không có rủi ro ghi đè order_token của session đã tồn tại.
-          const row = { key: id, order_token: rid()+rid()+rid(), ...toDb(obj, SESSION_MAP) };
+          // order_token/manage_token: cột NOT NULL với DEFAULT ở DB, nhưng
+          // upsert() của PostgREST gửi tường minh mọi key của object — kể cả
+          // khi thiếu key này, một số đường upsert vẫn insert NULL thay vì để
+          // DEFAULT chạy. Sinh token ở client cho chắc. set() trong app chỉ
+          // dùng để TẠO session mới (bản sửa đơn cũ đi qua update(), không
+          // qua đây) nên không có rủi ro ghi đè token của session đã tồn tại.
+          const row = { key: id, order_token: rid()+rid()+rid(), manage_token: rid()+rid()+rid(), ...toDb(obj, SESSION_MAP) };
           const { error } = await sb.from("sessions").upsert(row, { onConflict: "key" });
           if (error) throw error;
           return;
@@ -153,6 +159,12 @@
   async function findSessionKeyByOrderToken(token){
     if (!token) return null;
     const { data } = await sb.from("sessions").select("key").eq("order_token", token).maybeSingle();
+    return data?.key || null;
+  }
+  /* ---------- tìm session theo manage_token (link quản lý của người tạo đơn) ---------- */
+  async function findSessionKeyByManageToken(token){
+    if (!token) return null;
+    const { data } = await sb.from("sessions").select("key").eq("manage_token", token).maybeSingle();
     return data?.key || null;
   }
 
@@ -220,15 +232,27 @@
     return q;
   }
 
-  const db = { doc, collection: coll, mutateOrder, findSessionKeyByOrderToken };
+  const db = { doc, collection: coll, mutateOrder, findSessionKeyByOrderToken, findSessionKeyByManageToken };
 
   /* ---------- user ---------- */
-  // canEdit/isOwner: true khi mở LINK GỐC (không có ?order=...), false khi
-  // mở link đơn của guest. Không có xác thực nào khác — xem ghi chú đầu file.
+  // canEdit/isOwner: chỉ true khi có ?manage=... trên URL VÀ nó khớp đúng
+  // 1 session đang tồn tại (verify async, xem resolveManageAccess() —
+  // index.html gọi 1 lần trong boot() trước khi đọc canEdit()/isOwner()).
+  // Link gốc không có ?manage= => canEdit=false (không phải true như bản
+  // thiết kế trước) vì link gốc giờ CHỈ dùng để tạo đơn mới, không quản
+  // lý bất kỳ session nào cho tới khi đơn được tạo và redirect sang
+  // ?manage=... của chính nó.
+  let manageOk = false;
+  async function resolveManageAccess(){
+    if (!manageToken){ manageOk = false; return false; }
+    const key = await findSessionKeyByManageToken(manageToken).catch(()=>null);
+    manageOk = !!key;
+    return manageOk;
+  }
   const user = {
     id: async () => getOrCreateUid(),
-    canEdit: async () => !isGuestLink,
-    isOwner: async () => !isGuestLink
+    canEdit: async () => manageOk,
+    isOwner: async () => manageOk
   };
 
   /* ---------- sample (đọc ảnh AI) — CHƯA khả dụng trong bản Supabase ---------- */
@@ -241,6 +265,8 @@
     return data;
   };
   window.SupabaseOrderToken = orderToken; // để index.html đọc lại nếu cần (vd ghép link)
+  window.SupabaseManageToken = manageToken;
+  window.SupabaseResolveManageAccess = resolveManageAccess; // PHẢI gọi (await) trong boot() TRƯỚC user.canEdit()/isOwner()
 
   window.SupabaseAdapter = { db, user, sample };
 })();

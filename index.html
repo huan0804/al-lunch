@@ -352,6 +352,9 @@ const mine = () => S.orders[S.uid]?.days?.[curKey()];
 function ensureCart(){
   if (S.cart && S.cart.date===curKey()) return true;
   if (isLocked() && !S.canEdit){ toast("Đơn nhóm đã chốt, không thêm món được nữa"); return false; }
+  // Bắt nhập tên TRƯỚC khi mở sheet chọn món — chọn món trước rồi mới hỏi tên
+  // (hành vi cũ) khiến người quên điền tên có nguy cơ mất lựa chọn đã chọn.
+  if (!(lsGet("comtrua:name")||"").trim()){ S.sheet={kind:"askname"}; return false; }
   S.cart = newCart(S.uid, mine()); return true;
 }
 const cartTotal = c => c.items.reduce((a,it)=>a+setPrice(it.picks.length)*it.qty,0);
@@ -386,12 +389,29 @@ async function submitCart(){
 }
 
 /* ================= Menu builder ================= */
+// Gợi ý "thực đơn lần trước": lưu vào localStorage của máy này mỗi khi
+// TẠO đơn mới thành công (xem publishGroup()) — thay cho việc trước đây
+// đọc từ danh sách "Đơn nhóm gần đây" trên server (đã bỏ, xem CLAUDE.md/
+// memory al-lunch-migration về quyết định nhiều đơn song song).
+function lastMenuLocal(){ try{ return JSON.parse(lsGet("comtrua:lastMenu")||"null"); }catch{ return null; } }
+function saveLastMenuLocal(shopName, menu){ try{ lsSet("comtrua:lastMenu", JSON.stringify({shopName, menu, at:Date.now()})); }catch{} }
+// Bank riêng CỦA NGƯỜI TẠO ĐƠN này (không còn dùng chung config nữa) —
+// tự điền sẵn từ lần trước NGƯỜI NÀY từng nhập trên MÁY NÀY, để không phải
+// gõ lại mỗi lần, nhưng không bao giờ hiện tài khoản của người khác.
+function lastBankLocal(){ try{ return JSON.parse(lsGet("comtrua:lastBank")||"null"); }catch{ return null; } }
+function saveLastBankLocal(bank){ try{ lsSet("comtrua:lastBank", JSON.stringify(bank)); }catch{} }
 function ensureMd(mode){
   if (S.md) return;
-  const s=S.session, today=todayStr(), live = mode==="edit" && s && s.date===today && !S.viewKey;
+  const s=S.session, live = mode==="edit" && !!s;
   const left = live ? Math.max(5, Math.round((deadlineAt(s)-Date.now())/60000/5)*5) : 30;
+  const lastLocal = live ? null : lastMenuLocal();
+  const lastBank = live ? null : lastBankLocal();
   S.md = { items: live ? clone(s.menu) : [], minutes: left, autoClose: live ? s.autoClose!==false : true,
-    hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (S.recent[0]?.shopName||""), text:"", mode: live?"edit":"new" };
+    hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (lastLocal?.shopName||""), text:"", mode: live?"edit":"new",
+    bankBin: live ? (s.bankBin||"970436") : (lastBank?.bankBin||"970436"),
+    bankName: live ? (s.bankName||"Vietcombank") : (lastBank?.bankName||"Vietcombank"),
+    accountNo: live ? (s.accountNo||"") : (lastBank?.accountNo||""),
+    accountName: live ? (s.accountName||"") : (lastBank?.accountName||"") };
 }
 function libMatch(name){ const n=norm(name); return S.dishes.find(d=>norm(d.nameVi)===n); }
 function addDraftItem(vi, en=""){
@@ -430,27 +450,40 @@ async function publishGroup(){
   const md=S.md; md.items=md.items.filter(x=>x.nameVi.trim());
   if (!md.hostName.trim()){ toast("Nhập tên trưởng nhóm"); return; }
   if (!md.items.length){ toast("Thực đơn chưa có món nào"); return; }
-  if (!S.config?.accountNo){ toast("Hãy thiết lập tài khoản nhận tiền trước"); S.view="bank"; render(); return; }
+  if (!/^\d{6}$/.test(md.bankBin||"")){ toast("Mã BIN ngân hàng phải gồm 6 số"); S.open.bank=true; render(); return; }
+  if (!/^[0-9A-Za-z]{4,19}$/.test((md.accountNo||"").trim())){ toast("Số tài khoản không hợp lệ"); S.open.bank=true; render(); return; }
   S.busy=true; render();
   const date=todayStr(), dAt=Date.now()+md.minutes*60000;
   try{
-    let key = md.mode==="edit" ? S.config.current : date;
+    // "edit" luôn sửa ĐÚNG session mà link ?manage= hiện tại đang trỏ tới —
+    // không còn khái niệm "đơn hiện tại toàn cục" (config.current).
+    let key = md.mode==="edit" ? S.sessKey : date;
     if (md.mode!=="edit"){ const ex=await S.db.doc("sessions/"+key).get(); if (ex.exists) key = date+"-"+rid().slice(0,5); }
     const snap=await (async()=>{ try{ return await S.db.doc("sessions/"+key).get(); }catch{ return {exists:false}; } })();
     const isNew=!snap.exists;
-    const prevKey = S.config.current;
     for (const it of md.items){
       if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), (it.nameEn||"").trim()); continue; }
       if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), (it.nameEn||"").trim());
     }
     const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut}));
-    const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim() };
+    const bank={ bankBin:md.bankBin, bankName:md.bankName, accountNo:md.accountNo.trim(), accountName:ascii(md.accountName) };
+    const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim(), ...bank };
     if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
     else await S.db.doc("sessions/"+key).update(fields);
-    if (isNew && prevKey && prevKey!==key){ try{ const ps=await S.db.doc("sessions/"+prevKey).get(); if(ps.exists && ps.data().status!=="closed") await S.db.doc("sessions/"+prevKey).update({status:"closed"}); }catch{} }
-    if (S.config.current!==key) await S.db.doc("config/main").update({current:key});
-    S.viewKey=null; S.cart=null;
     lsSet("comtrua:name", md.hostName.trim());
+    saveLastMenuLocal(md.shopName.trim(), menu);
+    saveLastBankLocal(bank);
+    if (isNew){
+      // Chuyển sang link quản lý của session vừa tạo — người tạo tự lưu/bookmark
+      // link này để quay lại quản lý sau (không còn "đơn hiện tại" toàn cục).
+      const created=await S.db.doc("sessions/"+key).get();
+      const manageToken=created.data()?.manageToken;
+      if (manageToken){
+        const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+        location.href = `${base}?manage=${manageToken}`;
+        return; // trang sẽ tải lại với URL mới, không cần render tiếp ở đây
+      }
+    }
     S.md=null; S.view="home"; S.sheet={kind:"share"};
     toast(isNew?"Đã tạo đơn hàng nhóm":"Đã cập nhật đơn hàng nhóm");
   }catch(e){ writeErr(e); }
@@ -467,8 +500,14 @@ function render(){
 function view(){
   if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
   if (!S.cfgLoaded||!S.sessLoaded||!S.ordersLoaded) return `<div class="page"><p class="pad muted" style="padding-top:30px"><span class="spin"></span> Đang tải…</p></div>`;
+  // Cài đặt chung (giá/tuỳ chọn) không gắn với quyền quản lý session nào —
+  // ai cũng sửa được, giống việc ai cũng tạo được đơn mới.
+  if (S.view==="bank") return bankView();
+  // Link gốc (không ?manage= hợp lệ, không ?order=) → không có session nào
+  // để hiển thị, luôn ở màn "Tạo đơn nhóm mới". Ai mở link gốc cũng tạo
+  // được đơn (không cần quyền gì) — xem ghi chú boot()/publishGroup().
+  if (!S.fixedSessKey && !S.session) return createView();
   if (S.canEdit && S.view==="create") return createView();
-  if (S.canEdit && S.view==="bank") return bankView();
   if (S.view==="cart" && S.session) return cartView();
   return homeView();
 }
@@ -476,49 +515,36 @@ const topbar = (title, sub, left="back", right="", to="home") =>
   `<div class="topbar"><button class="icon" data-a="go" data-v="${to}" aria-label="${left==="back"?"Quay lại":"Đóng"}">${left==="back"?I.back:I.close}</button><div class="tt"><b>${esc(title)}</b>${sub?`<small>${esc(sub)}</small>`:""}</div>${right}</div>`;
 
 /* ---------- Home (shop page) ---------- */
+// homeView() chỉ được gọi khi đã có S.session xác định (qua ?manage= hoặc
+// ?order= — xem view()), nên KHÔNG còn trường hợp "chưa có đơn nào" ở đây;
+// trường hợp đó đi thẳng vào createView() (màn tạo đơn) từ view(). Cũng
+// không còn "Đơn nhóm gần đây" (mỗi session giờ có link riêng, không có
+// "đơn hiện tại" toàn cục để liệt kê các đơn khác).
 function homeView(){
-  const s=S.session, host=S.canEdit, live = s && s.date===todayStr();
+  const s=S.session, host=S.canEdit;
+  if (!s) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không tìm thấy đơn nhóm này</b><p class="muted">Link có thể đã sai hoặc đơn đã bị xoá.</p></div></div>`;
   const locked=isLocked();
-  const hbtn = host && S.config ? `<div class="hbtn"><button data-a="go" data-v="bank">${I.pen} Cài đặt</button></div>` : "";
-  let card;
-  if (!s || !live){
-    card = `<div class="shop"><div class="body"><h1>Cơm trưa văn phòng</h1><div class="meta">${esc(fmtDate(todayStr()))}</div>
-      <div class="meta">${host?"Chưa có đơn nhóm hôm nay. Tạo đơn rồi gửi link cho cả team vào chọn món.":"Chưa có đơn nhóm hôm nay. Trưởng nhóm sẽ gửi link khi thực đơn sẵn sàng."}</div></div></div>`;
-  } else {
-    card = `<div class="shop"><div class="grp">${I.group}<span>Đơn hàng nhóm của ${esc(hostName())}</span></div><div class="body">
+  const hbtn = host ? `<div class="hbtn"><button data-a="go" data-v="bank">${I.pen} Cài đặt chung</button></div>` : "";
+  const card = `<div class="shop"><div class="grp">${I.group}<span>Đơn hàng nhóm của ${esc(hostName())}</span></div><div class="body">
       <h1>${esc(s.shopName || "Cơm trưa văn phòng")}</h1>
       <div class="meta">${esc(fmtDate(s.date))}</div>
       <div class="meta"><span class="price">${money(unitPrice())} / suất 2 món</span></div>
       <div class="meta"><span class="dl ${locked?"closed":""}">${I.clock} ${s.status==="closed"?"Đã chốt đơn":locked?"Đã hết giờ đặt món":(s.autoClose===false?"Dự kiến chốt lúc ":"Chốt đơn lúc ")+esc(hhmm(deadlineAt(s)))}</span></div></div></div>`;
-  }
-  let pills=""; const canProxy = live && !S.viewKey && (!locked || host);
-  if (host && (!s || !live)) pills = `<button class="pill hl" data-a="create" data-v="new">${I.addp} Đặt đơn nhóm</button>`;
-  else if (live){
-    pills = `<button class="pill hl" data-a="share">${I.addp} Mời thêm thành viên</button>`;
-    if (host) pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Quản lý đơn</button><button class="pill" data-a="create" data-v="edit">${I.menu} Sửa thực đơn</button><button class="pill" data-a="create" data-v="new">${I.plus} Đặt đơn nhóm mới</button>`;
-    else pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Đơn của tôi</button>`;
-    if (canProxy) pills += `<button class="pill" data-a="proxy-open">${I.group} Đặt hộ${S.cart?.guests?.length?` (${S.cart.guests.length})`:""}</button>`;
-  }
-  if (s && !live && (host || mine())) pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} ${host?"Quản lý đơn":"Đơn của tôi"} ${esc(fmtDate(s.date))}</button>`;
+  let pills = `<button class="pill hl" data-a="share">${I.addp} Mời thêm thành viên</button>`;
+  const canProxy = !locked || host;
+  if (host) pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Quản lý đơn</button><button class="pill" data-a="create" data-v="edit">${I.menu} Sửa thực đơn</button><button class="pill" data-a="new-group">${I.plus} Đặt đơn nhóm mới</button>`;
+  else pills += `<button class="pill" data-a="go" data-v="cart">${I.bill} Đơn của tôi</button>`;
+  if (canProxy) pills += `<button class="pill" data-a="proxy-open">${I.group} Đặt hộ${S.cart?.guests?.length?` (${S.cart.guests.length})`:""}</button>`;
   const proxyBanner = S.cart && S.cart.docId!==S.uid ? `<div class="banner" style="margin-top:14px"><span>Đang ${S.cart.existing?`sửa đơn của <b>${esc(S.cart.existing.name)}</b>`:"<b>đặt hộ</b> người khác"}</span><button class="btn" data-a="cancel-cart">Huỷ</button></div>` : "";
-  let menu="";
-  if (s && live){
-    const m=s.menu||[];
-    menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
+  const m=s.menu||[];
+  const menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
       <p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>
       ${m.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</div>
         ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}
     </div>`;
-  } else if (host && S.config && !live) menu = "";
-  if (host && !S.config) menu = `<div class="band"></div><div class="pad"><div class="note">Lần đầu sử dụng: bấm <b>Đặt đơn nhóm</b>, bạn sẽ được hướng dẫn nhập tài khoản nhận tiền trước.</div></div>`;
-  if (host){
-    const rec=S.recent.filter(r=>r.id!==S.config?.current).slice(0,5);
-    if (rec.length) menu += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:6px">Đơn nhóm gần đây</h2>${rec.map(r=>{ const l=ordersFor(r.id); const un=l.filter(o=>o.payMethod!=="host"&&o.payStatus!=="confirmed").length;
-      return `<button class="opt" data-a="view-sess" data-v="${esc(r.id)}"><span class="t"><b>${esc(r.shopName||"Cơm trưa")}: ${esc(fmtDate(r.date))}${r.deadline?` (chốt ${esc(r.deadline)})`:""}</b><small>${l.reduce((a,o)=>a+setsCount(o),0)} suất${un?`, còn ${un} người chưa thanh toán`:", đã thu đủ"}</small></span>${I.chev}</button>`; }).join("")}</div>`;
-  }
   let bar="";
   if (S.cart && S.cart.items.length) bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Giỏ hàng · ${cartCount(S.cart)} suất</span><span class="num">${money(cartTotal(S.cart))}</span></button></div></div>`;
-  else if (live && mine()){ const [l]=statusOf(mine()); bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Đơn của bạn: ${setsCount(mine())} suất</span><span>${esc(l)}</span></button></div></div>`; }
+  else if (mine()){ const [l]=statusOf(mine()); bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Đơn của bạn: ${setsCount(mine())} suất</span><span>${esc(l)}</span></button></div></div>`; }
   return `<div class="page"><div class="hero">${hbtn}</div>${card}${proxyBanner}<div class="pills">${pills}</div>${menu}${bar}</div>`;
 }
 
@@ -528,11 +554,22 @@ function sheetView(){
   if (sh.kind==="item") return itemSheet(sh);
   if (sh.kind==="share") return shareSheet();
   if (sh.kind==="proxy") return proxySheet(sh);
+  if (sh.kind==="askname") return asknameSheet(sh);
   if (sh.kind==="confirm") return `<div class="scrim" data-a="ask-no"></div><div class="sheet" role="alertdialog" aria-label="Xác nhận"><div class="grab"></div>
     <p style="font-size:17px;font-weight:600;margin:6px 0 20px">${esc(sh.msg)}</p>
     <button class="cta" data-a="ask-ok" ${sh.danger?'style="background:var(--chili);color:#fff"':""}>${esc(sh.ok)}</button>
     <button class="cta" data-a="ask-no" style="background:var(--surface);border:1.5px solid var(--line);margin-top:10px">Quay lại</button></div>`;
   return "";
+}
+function asknameSheet(sh){
+  return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Nhập tên">
+    <div class="grab"></div><div class="between"><h3>Nhập tên trước khi chọn món</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
+    <div class="muted small">Để quán và trưởng nhóm biết suất này là của ai.</div>
+    <label class="f" for="askname-input" style="margin-top:10px">Tên của bạn</label>
+    <input type="text" id="askname-input" data-f="askname" value="${esc(sh.name||"")}" placeholder="VD: Minh (QA)" maxlength="40" autofocus>
+    ${sh.err?`<p class="small err">${esc(sh.err)}</p>`:""}
+    <button class="cta" data-a="askname-ok" style="margin-top:14px">Tiếp tục chọn món</button>
+  </div>`;
 }
 function proxySheet(sh){
   const n=sh.names.length;
@@ -606,13 +643,12 @@ function lineHtml(label, note, qty, price, acts=""){
 }
 function cartView(){
   const s=S.session, host=S.canEdit, locked=isLocked(), c=S.cart && S.cart.date===curKey() ? S.cart : null;
-  const right = s.date===todayStr() && !S.viewKey ? `<button class="pill" style="padding:8px 14px" data-a="share">${I.addp} Mời thêm</button>` : "";
+  const right = `<button class="pill" style="padding:8px 14px" data-a="share">${I.addp} Mời thêm</button>`;
   let html = topbar("Kiểm tra đơn hàng", s.shopName || fmtDate(s.date), "back", right);
-  if (S.viewKey) html += `<div class="banner"><span>Đang xem đơn nhóm cũ ${esc(fmtDate(s.date))}</span><button class="btn" data-a="back-current">Về đơn hiện tại</button></div>`;
   if (host) html += hostSummary();
   const isOther = c && c.docId!==S.uid;
   // own / editing cart
-  html += `<div class="pad"><div class="between" style="margin:8px 0 12px"><h2 class="sec">${isOther?"Giỏ hàng đặt hộ":"Giỏ hàng của bạn"}</h2>${(!locked||host)&&!S.viewKey?`<button class="link" data-a="go" data-v="home">Thêm món</button>`:""}</div>`;
+  html += `<div class="pad"><div class="between" style="margin:8px 0 12px"><h2 class="sec">${isOther?"Giỏ hàng đặt hộ":"Giỏ hàng của bạn"}</h2>${(!locked||host)?`<button class="link" data-a="go" data-v="home">Thêm món</button>`:""}</div>`;
   if (c){
     const hp=hostPaysFor(c.docId);
     html += `<div class="card"><div class="mem-head"><span class="avatar">${esc((c.name||"?").trim()[0]||"?")}</span><div class="nm"><input type="text" id="c-name" data-f="c-name" value="${esc(c.name)}" placeholder="${isOther?"Tên người được đặt hộ":"Nhập tên của bạn"}" maxlength="40" aria-label="Tên"></div>${hp?`<span class="badge b-gry">Trưởng nhóm</span>`:""}</div>
@@ -671,7 +707,7 @@ function payBlock(o){
   return `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Thanh toán</h2>${b}</div>${bar}`;
 }
 function qrPanel(o){
-  const c=S.config; if(!c?.accountNo) return `<p class="err">Trưởng nhóm chưa nhập tài khoản ngân hàng.</p>`;
+  const c=S.session; if(!c?.accountNo) return `<p class="err">Trưởng nhóm chưa nhập tài khoản ngân hàng.</p>`;
   const info=transferInfo(curDate(), o.name), svg=qrSvg(vietqr(c.bankBin,c.accountNo,o.total,info));
   return `<div class="qrbox">${svg?`<div class="qr" aria-label="Mã QR chuyển khoản">${svg}</div>`:""}<div class="kv">
     <div><span>Ngân hàng</span><b>${esc(c.bankName||c.bankBin)}</b></div>
@@ -736,17 +772,30 @@ function createView(){
   const q=norm(S.libQ);
   const lib=S.dishes.filter(d=>!q||norm(d.nameVi).includes(q)||norm(d.nameEn).includes(q)).sort((a,b)=>(b.timesUsed||0)-(a.timesUsed||0)||String(b.lastUsed||"").localeCompare(String(a.lastUsed||"")));
   const inMenu=id=>md.items.some(x=>x.id===id);
-  const last=S.recent.find(r=>r.id!==curKey()&&r.menu?.length);
+  const last=live?null:lastMenuLocal();
   const ai=S.ai;
   const until=hhmm(Date.now()+md.minutes*60000);
-  const bankLine = c?.accountNo ? `Chuyển khoản về ${esc(c.bankName||"")} ${esc(String(c.accountNo).slice(-4).padStart(8,"•"))} hoặc tiền mặt. ${money(c.pricePerSet||35000)} / suất 2 món.` : `<span class="err">Chưa có tài khoản nhận tiền. Bấm để thiết lập.</span>`;
-  return `<div class="page">${topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close")}
+  const bankKnown = BANKS.some(b=>b[1]===md.bankBin);
+  const bankPreview = md.accountNo && /^\d{6}$/.test(md.bankBin) ? qrSvg(vietqr(md.bankBin, md.accountNo.trim(), 0, "")) : "";
+  const bankLine = md.accountNo ? `${esc(md.bankName||"")} ${esc(String(md.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
+  const canClose = live || !!S.fixedSessKey; // link gốc tạo đơn mới: không có "trang trước" để đóng về
+  return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
     <div class="pad">
       <div class="grid" style="display:grid;gap:12px;margin-top:4px">
         <div><label class="f" for="md-host">Tên trưởng nhóm</label><input type="text" id="md-host" data-f="md-host" value="${esc(md.hostName)}" placeholder="VD: Nguyễn" maxlength="40"></div>
         <div><label class="f" for="md-shop">Tên quán (không bắt buộc)</label><input type="text" id="md-shop" data-f="md-shop" value="${esc(md.shopName)}" placeholder="VD: Cơm nhà Út" maxlength="60"></div>
       </div>
-      <div class="setting" style="border-top:1px solid var(--line);margin-top:16px">${I.bill}<div class="t"><b>Chia hoá đơn với các thành viên</b><small>${bankLine}</small></div><button class="icon soft" data-a="go" data-v="bank" aria-label="Sửa tài khoản">${I.pen}</button></div>
+      <details class="more" data-k="bank" ${S.open.bank!==false?"open":""} style="border-top:1px solid var(--line);margin-top:16px;padding-top:10px">
+        <summary><span><b>Tài khoản nhận tiền</b> — ${bankLine}</span>${I.chev}</summary>
+        <p class="small muted" style="margin:6px 0 10px">Tài khoản của bạn — chỉ dùng cho đơn này, tự điền sẵn lần sau trên máy này.</p>
+        <div style="display:grid;gap:10px">
+          <div><label class="f" for="md-bank">Ngân hàng</label><select id="md-bank" data-f="md-bank">${BANKS.map(b=>`<option value="${b[1]}" ${b[1]===md.bankBin?"selected":""}>${esc(b[0])}</option>`).join("")}<option value="other" ${!bankKnown?"selected":""}>Ngân hàng khác (nhập mã BIN)</option></select></div>
+          ${!bankKnown?`<div><label class="f" for="md-bin">Mã BIN ngân hàng (6 số)</label><input type="text" id="md-bin" data-f="md-bin" inputmode="numeric" value="${esc(md.bankBin)}"></div>`:""}
+          <div><label class="f" for="md-acc">Số tài khoản</label><input type="text" id="md-acc" data-f="md-acc" inputmode="numeric" value="${esc(md.accountNo)}"></div>
+          <div><label class="f" for="md-accname">Tên chủ tài khoản</label><input type="text" id="md-accname" data-f="md-accname" value="${esc(md.accountName)}" placeholder="NGUYEN VAN A"></div>
+        </div>
+        ${bankPreview?`<div class="qrbox" style="margin-top:12px"><div class="qr">${bankPreview}</div><p class="small muted kv">Quét thử bằng app ngân hàng. Nếu hiện đúng tên chủ tài khoản là thông tin chính xác.</p></div>`:""}
+      </details>
       <div class="setting">${I.clock}<div class="t"><b>Giới hạn thời gian</b><small>Chốt đơn lúc ${until}${live?" (tính lại từ bây giờ)":""}</small></div><div class="stepper"><button class="icon soft" data-a="md-min" data-v="-5" aria-label="Giảm 5 phút">${I.minus}</button><b class="num">${md.minutes} phút</b><button class="icon soft" data-a="md-min" data-v="5" aria-label="Tăng 5 phút">${I.plus}</button></div></div>
       <div class="setting">${I.cal}<div class="t"><b>Tự động chốt đơn</b><small>${md.autoClose?`Sau ${md.minutes} phút không ai đặt thêm được`:"Bạn tự bấm Chốt đơn khi đủ người"}</small></div><button class="toggle" role="switch" aria-checked="${md.autoClose}" data-a="md-auto" aria-label="Tự động chốt đơn"></button></div>
     </div>
@@ -759,7 +808,7 @@ function createView(){
       ${ai?.msg?`<p class="small">${esc(ai.msg)}</p>`:""}${ai?.err?`<p class="small err">${esc(ai.err)}</p>`:""}
       <input type="file" id="file" accept="image/*" hidden>`:`<p class="small muted">Đọc ảnh menu bằng AI chưa hỗ trợ ở bản này. Hãy chọn từ thư viện món cũ hoặc dán text.</p>`}
       <details class="more" data-k="lib" ${S.open.lib!==false?"open":""}><summary><span>Chọn món đã từng có (${S.dishes.length})</span>${I.chev}</summary>
-        ${last?`<button class="btn" data-a="md-copy-last" style="margin-bottom:8px">Copy thực đơn ${esc(fmtDate(last.date))}</button>`:""}
+        ${last?.menu?.length?`<button class="btn" data-a="md-copy-last" style="margin-bottom:8px">Copy thực đơn lần trước${last.shopName?` (${esc(last.shopName)})`:""}</button>`:""}
         ${S.dishes.length?`<input type="search" id="lib-q" data-f="lib-q" value="${esc(S.libQ)}" placeholder="Tìm món…">
         <div class="lib">${lib.map(d=>`<button class="opt" role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}"><span class="t"><b>${esc(d.nameVi)}</b><small>${d.nameEn?esc(d.nameEn)+", ":""}đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
       </details>
@@ -776,24 +825,18 @@ function createView(){
   </div>`;
 }
 function bankView(){
-  if (!S.sf){ const c=S.config||{}; S.sf={bankBin:c.bankBin||"970436",bankName:c.bankName||"Vietcombank",accountNo:c.accountNo||"",accountName:c.accountName||"",pricePerSet:c.pricePerSet||35000,hostPays:c.hostPays!==false,showPaymentToTeam:c.showPaymentToTeam!==false,shareUrl:c.shareUrl||ARTIFACT_URL}; }
-  const f=S.sf, known=BANKS.some(b=>b[1]===f.bankBin);
-  const preview = f.accountNo && /^\d{6}$/.test(f.bankBin) ? qrSvg(vietqr(f.bankBin,f.accountNo.trim(),0,"")) : "";
-  return `<div class="page">${topbar("Chia hoá đơn", "Tài khoản nhận tiền và cài đặt", "back", "", S.bankReturn||"home")}<div class="pad">
-    <div style="display:grid;gap:12px">
-      <div><label class="f" for="s-bank">Ngân hàng</label><select id="s-bank" data-f="s-bank">${BANKS.map(b=>`<option value="${b[1]}" ${b[1]===f.bankBin?"selected":""}>${esc(b[0])}</option>`).join("")}<option value="other" ${!known?"selected":""}>Ngân hàng khác (nhập mã BIN)</option></select></div>
-      ${!known?`<div><label class="f" for="s-bin">Mã BIN ngân hàng (6 số)</label><input type="text" id="s-bin" data-f="s-bin" inputmode="numeric" value="${esc(f.bankBin)}"></div>`:""}
-      <div><label class="f" for="s-acc">Số tài khoản</label><input type="text" id="s-acc" data-f="s-acc" inputmode="numeric" value="${esc(f.accountNo)}"></div>
-      <div><label class="f" for="s-name">Tên chủ tài khoản</label><input type="text" id="s-name" data-f="s-name" value="${esc(f.accountName)}" placeholder="NGUYEN VAN A"></div>
-    </div>
-    ${preview?`<div class="qrbox" style="margin-top:14px"><div class="qr">${preview}</div><p class="small muted kv">Quét thử bằng app ngân hàng. Nếu hiện đúng tên chủ tài khoản là thông tin chính xác.</p></div>`:""}
-    <div class="band" style="margin:18px -20px"></div>
+  // Chỉ còn cấu hình CHUNG toàn hệ thống (giá mặc định, tuỳ chọn thanh
+  // toán, domain). Tài khoản nhận tiền không còn ở đây — mỗi người nhập
+  // tài khoản của họ ngay trong màn tạo đơn (xem createView()).
+  if (!S.sf){ const c=S.config||{}; S.sf={pricePerSet:c.pricePerSet||35000,hostPays:c.hostPays!==false,showPaymentToTeam:c.showPaymentToTeam!==false,shareUrl:c.shareUrl||ARTIFACT_URL}; }
+  const f=S.sf;
+  return `<div class="page">${topbar("Cài đặt chung", "Áp dụng cho mọi đơn nhóm", "back", "", S.bankReturn||"home")}<div class="pad">
     <label class="f" for="s-price">Giá 1 suất 2 món</label><input type="number" id="s-price" data-f="s-price" min="1000" step="500" value="${esc(f.pricePerSet)}" style="max-width:200px">
     <p class="small muted">1 món (gấp đôi) và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới.</p>
-    <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của bạn (chủ trang) ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
+    <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của người tạo đơn ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
     <div class="setting"><div class="t"><b>Cho cả team xem ai đã thanh toán</b><small>Chỉ hiện tên và trạng thái, không hiện món và số tiền</small></div><button class="toggle" role="switch" aria-checked="${f.showPaymentToTeam}" data-a="s-toggle" data-v="showPaymentToTeam"></button></div>
     <label class="f" for="s-url" style="margin-top:8px">Domain của app (chỉ sửa khi đổi tên miền)</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
-    <p class="small muted">Đây KHÔNG phải link gửi cho team — mỗi đơn nhóm có link riêng, lấy ở nút "Mời thêm thành viên" trên trang chủ sau khi tạo đơn.</p>
+    <p class="small muted">Tài khoản nhận tiền không cài đặt ở đây — mỗi lần "Đặt đơn nhóm" bạn nhập tài khoản của mình ngay trong màn đó.</p>
   </div>
   <div class="bottom"><div class="in"><button class="cta" data-a="save-settings" ${S.busy?"disabled":""}>Lưu</button></div></div></div>`;
 }
@@ -801,7 +844,7 @@ function bankView(){
 /* ================= Events ================= */
 function ask(msg, ok="Đồng ý", danger=false){ return new Promise(res=>{ S.sheet={kind:"confirm",msg,ok,danger,res}; render(); }); }
 function closeAsk(v){ const sh=S.sheet; if(sh?.kind==="confirm"){ S.sheet=null; render(); sh.res(v); return true; } return false; }
-function go(v){ if(v==="home" && S.viewKey){ S.viewKey=null; S.cart=null; setTimeout(watchSession,0); } if(v==="bank") S.bankReturn = S.view==="create"?"create":"home"; S.view=v; S.sheet=null; if(v!=="bank") S.sf=null; if(v==="home"&&S.md) S.md=null; window.scrollTo({top:0}); }
+function go(v){ if(v==="bank") S.bankReturn = S.view==="create"?"create":"home"; S.view=v; S.sheet=null; if(v!=="bank") S.sf=null; if(v==="home"&&S.md) S.md=null; window.scrollTo({top:0}); }
 async function onClick(e){
   const b=e.target.closest("[data-a]"); if(!b||b.disabled) return;
   const a=b.dataset.a, v=b.dataset.v, i=Number(b.dataset.i), date=curKey();
@@ -811,15 +854,14 @@ async function onClick(e){
   switch(a){
     case "go": go(v); break;
     case "create": {
-      if (v!=="edit" && S.session && S.session.date===todayStr() && S.session.status!=="closed" && !S.viewKey){
-        const n=ordersFor(curKey()).length;
-        if (!(await ask(`Tạo đơn nhóm mới? Đơn nhóm hiện tại${n?` (${n} người đã đặt)`:""} sẽ được chốt lại khi bạn tạo xong đơn mới. Bạn vẫn xem lại và thu tiền được ở mục Đơn nhóm gần đây.`, "Tạo đơn nhóm mới"))) return;
-      }
-      S.md=null; ensureMd(v==="edit"?"edit":"new");
-      if(!S.config){ S.bankReturn="create"; S.view="bank"; toast("Thiết lập tài khoản nhận tiền trước nhé"); } else S.view="create";
+      S.md=null; ensureMd(v==="edit"?"edit":"new"); S.view="create";
       window.scrollTo({top:0}); break; }
-    case "view-sess": S.viewKey = v===S.config?.current ? null : v; S.cart=null; watchSession(); S.view="cart"; window.scrollTo({top:0}); break;
-    case "back-current": S.viewKey=null; S.cart=null; watchSession(); S.view="home"; break;
+    case "new-group": {
+      // Tạo đơn nhóm KHÁC (session mới, key khác) — không sửa đơn đang mở.
+      // Đơn giản nhất và rõ ràng nhất: quay về link gốc để bắt đầu từ đầu.
+      const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+      location.href = base;
+      return; }
     case "share": S.sheet={kind:"share"}; break;
     case "sh-close": S.sheet=null; break;
     case "copy": copyText(b.dataset.t); return;
@@ -844,9 +886,24 @@ async function onClick(e){
       const url = v==="teams" ? `https://teams.microsoft.com/share?href=${enc(link)}&msgText=${enc(msg)}` : v==="facebook" ? `https://www.facebook.com/sharer/sharer.php?u=${enc(link)}` : "";
       if (url){ try{ window.open(url, "_blank", "noopener"); }catch{} }
       return; }
-    case "add": { if(!ensureCart()) return; const per={}; sheetPeople().forEach(p=>per[p.id]={picks:[],note:"",qty:1});
+    case "add": {
+      if(!ensureCart()){ if(S.sheet?.kind==="askname") S.sheet.pendingDish=v; break; }
+      const per={}; sheetPeople().forEach(p=>per[p.id]={picks:[],note:"",qty:1});
       const g=S.cart.guests.find(g=>!S.cart.items.some(it=>it.for===g.id)); const active = g ? g.id : "self";
       per[active].picks=[v]; S.sheet={kind:"item", index:null, per, active}; break; }
+    case "askname-ok": {
+      const name=(S.sheet.name||"").trim();
+      if (!name){ S.sheet.err="Nhập tên của bạn"; break; }
+      lsSet("comtrua:name", name);
+      const pendingDish=S.sheet.pendingDish;
+      S.sheet=null;
+      if (!ensureCart()) break; // vẫn khoá nếu đơn đã chốt v.v.
+      if (pendingDish){
+        const per={}; sheetPeople().forEach(p=>per[p.id]={picks:[],note:"",qty:1});
+        const g=S.cart.guests.find(g=>!S.cart.items.some(it=>it.for===g.id)); const active=g?g.id:"self";
+        per[active].picks=[pendingDish]; S.sheet={kind:"item", index:null, per, active};
+      }
+      break; }
     case "sh-tab": S.sheet.active=v; break;
     case "proxy-open": if(!ensureCart()) return; S.sheet={kind:"proxy", names: S.cart.guests.length ? S.cart.guests.map(g=>g.name) : [""], err:null}; break;
     case "px-n": { const n=S.sheet.names; if(Number(v)>0 && n.length<15) n.push(""); else if(Number(v)<0 && n.length>1) n.pop(); break; }
@@ -889,12 +946,14 @@ async function onClick(e){
     case "close": try{ await S.db.doc("sessions/"+date).update({status:"closed"}); toast("Đã chốt đơn"); }catch(err){ writeErr(err); } break;
     case "reopen": try{ await S.db.doc("sessions/"+date).update({status:"open", autoClose:false}); toast("Đã mở lại, tự chốt đã tắt"); }catch(err){ writeErr(err); } break;
     case "delete-group": if(!(await ask("Xoá đơn hàng nhóm này? Mọi người sẽ không vào đặt được nữa.","Xoá đơn hàng nhóm",true))) return;
-      try{ if (S.config?.current===date) await S.db.doc("config/main").update({current:null}); await S.db.doc("sessions/"+date).delete(); S.viewKey=null; curSess=undefined; watchSession(); S.cart=null; go("home"); toast("Đã xoá đơn hàng nhóm"); }catch(err){ writeErr(err); } break;
+      // Sau khi xoá, link ?manage= này không còn trỏ tới session nào —
+      // homeView() sẽ tự hiện "Không tìm thấy đơn nhóm này" (S.session=null).
+      try{ await S.db.doc("sessions/"+date).delete(); S.cart=null; toast("Đã xoá đơn hàng nhóm"); }catch(err){ writeErr(err); } break;
     case "pick-file": document.getElementById("file")?.click(); return;
     case "md-min": S.md.minutes=Math.max(5,Math.min(600,S.md.minutes+Number(v))); break;
     case "md-auto": S.md.autoClose=!S.md.autoClose; break;
     case "md-lib": { const d=S.dishes.find(x=>x.id===v), k=S.md.items.findIndex(x=>x.id===v); if(k>=0) S.md.items.splice(k,1); else if(d) S.md.items.push({id:d.id,nameVi:d.nameVi,nameEn:d.nameEn||"",soldOut:false}); break; }
-    case "md-copy-last": { const last=S.recent.find(r=>r.id!==curKey()&&r.menu?.length); let n=0; last?.menu.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi,nameEn:x.nameEn||"",soldOut:false}); n++; } }); toast(`Đã thêm ${n} món`); break; }
+    case "md-copy-last": { const last=lastMenuLocal(); let n=0; last?.menu?.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi,nameEn:x.nameEn||"",soldOut:false}); n++; } }); toast(`Đã thêm ${n} món`); break; }
     case "md-text-add": { let n=0; String(S.md.text||"").split(/\n/).map(l=>l.replace(/^[\s\-•*\d.)]+/,"").trim()).filter(Boolean).forEach(l=>{ if(addDraftItem(l)) n++; }); S.md.text=""; toast(`Đã thêm ${n} món`); break; }
     case "md-add-one": S.md.items.push({id:null,nameVi:"",nameEn:"",soldOut:false}); break;
     case "md-del": S.md.items.splice(i,1); break;
@@ -904,12 +963,10 @@ async function onClick(e){
     case "s-toggle": S.sf[v]=!S.sf[v]; break;
     case "save-settings": {
       const f=S.sf;
-      if (!/^\d{6}$/.test(f.bankBin)){ toast("Mã BIN ngân hàng phải gồm 6 số"); return; }
-      if (!/^[0-9A-Za-z]{4,19}$/.test(f.accountNo.trim())){ toast("Số tài khoản không hợp lệ"); return; }
       S.busy=true; render();
-      // Bỏ query string khỏi link chia sẻ team để không lỡ lưu nhầm ?manage=... (token host) vào đó.
+      // Bỏ query string khỏi link chia sẻ team để không lỡ lưu nhầm ?manage=... vào đó.
       const cleanShareUrl = ((f.shareUrl||"").trim() || ARTIFACT_URL).split("?")[0].split("#")[0];
-      try{ await S.db.doc("config/main").set({...(clone(S.config)||{}), bankBin:f.bankBin, bankName:f.bankName, accountNo:f.accountNo.trim(), accountName:ascii(f.accountName), pricePerSet:Number(f.pricePerSet)||35000, hostPays:f.hostPays, showPaymentToTeam:f.showPaymentToTeam, shareUrl:cleanShareUrl}); toast("Đã lưu"); S.sf=null; S.view=S.bankReturn||"home"; }catch(err){ writeErr(err); }
+      try{ await S.db.doc("config/main").set({...(clone(S.config)||{}), pricePerSet:Number(f.pricePerSet)||35000, hostPays:f.hostPays, showPaymentToTeam:f.showPaymentToTeam, shareUrl:cleanShareUrl}); toast("Đã lưu"); S.sf=null; S.view=S.bankReturn||"home"; }catch(err){ writeErr(err); }
       S.busy=false; break; }
     default: return;
   }
@@ -922,15 +979,16 @@ function onInput(e){
     case "c-name": S.cart.name=t.value; break;
     case "sh-note": S.sheet.per[S.sheet.active].note=t.value; return;
     case "px": S.sheet.names[i]=t.value; return;
+    case "askname": S.sheet.name=t.value; return;
     case "md-host": S.md.hostName=t.value; return;
     case "md-shop": S.md.shopName=t.value; return;
     case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; return;
     case "md-en": S.md.items[i].nameEn=t.value; return;
     case "md-text": S.md.text=t.value; return;
     case "lib-q": S.libQ=t.value; break;
-    case "s-acc": S.sf.accountNo=t.value; break;
-    case "s-name": S.sf.accountName=t.value; return;
-    case "s-bin": S.sf.bankBin=t.value.trim(); break;
+    case "md-acc": S.md.accountNo=t.value; break;
+    case "md-accname": S.md.accountName=t.value; return;
+    case "md-bin": S.md.bankBin=t.value.trim(); break;
     case "s-price": S.sf.pricePerSet=t.value; return;
     case "s-url": S.sf.shareUrl=t.value; return;
     default: return;
@@ -941,7 +999,7 @@ app.addEventListener("input", onInput); overlay.addEventListener("input", onInpu
 app.addEventListener("change", e=>{
   const t=e.target;
   if (t.id==="file"){ readMenuImage(t.files?.[0]); t.value=""; return; }
-  if (t.dataset.f==="s-bank"){ if(t.value==="other"){ S.sf.bankBin=""; S.sf.bankName="Ngân hàng khác"; } else { S.sf.bankBin=t.value; S.sf.bankName=BANKS.find(b=>b[1]===t.value)?.[0]||""; } render(); }
+  if (t.dataset.f==="md-bank"){ if(t.value==="other"){ S.md.bankBin=""; S.md.bankName="Ngân hàng khác"; } else { S.md.bankBin=t.value; S.md.bankName=BANKS.find(b=>b[1]===t.value)?.[0]||""; } render(); }
 });
 app.addEventListener("toggle", e=>{ const d=e.target; if(d?.dataset?.k) S.open[d.dataset.k]=d.open; }, true);
 app.addEventListener("keydown", e=>{ if(e.target.id==="drop"&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); document.getElementById("file")?.click(); } });
@@ -953,11 +1011,14 @@ document.addEventListener("paste", e=>{ if(!(S.canEdit&&S.view==="create")) retu
 setInterval(()=>{ if(S.session && !S.sheet) render(); }, 60000);
 
 /* ================= Boot ================= */
+// Mô hình điều hướng: mỗi tải trang gắn với TỐI ĐA 1 session, xác định
+// một lần khi boot() chạy, từ ?manage=... (quyền quản lý) hoặc ?order=...
+// (guest xem/đặt món). Không có 1 trong 2 => không có session nào cả,
+// trang chủ luôn hiện màn "Tạo đơn nhóm mới" (xem view()). Không còn khái
+// niệm "đơn hiện tại" toàn cục (config.current đã bỏ khỏi schema).
 let unSess=null, curSess;
 function watchSession(){
-  // Link đơn của guest (?order=...) luôn ghim đúng 1 session, bất kể
-  // config.current đổi thế nào — S.guestSessKey được resolve 1 lần trong boot().
-  const id = S.guestSessKey!==undefined ? S.guestSessKey : (S.viewKey||S.config?.current||null);
+  const id = S.fixedSessKey || null;
   if(id===curSess) return; curSess=id; S.sessKey=id;
   unSess?.(); S.session=null;
   if(!id){ S.sessLoaded=true; render(); return; }
@@ -968,16 +1029,23 @@ function watchSession(){
   if (!window.SupabaseAdapter){ render(); return; }
   const {db,user,sample}=window.SupabaseAdapter;
   S.db=db; S.sample=sample; S.imagesOK=false; // đọc ảnh AI chưa khả dụng trong bản Supabase, xem PROJECT_HANDOFF.md
+  // PHẢI resolve quyền quản lý (khớp ?manage= với đúng 1 session) TRƯỚC
+  // khi đọc user.canEdit()/isOwner() — xem supabase-adapter.js.
+  await window.SupabaseResolveManageAccess?.();
   if (user) [S.uid,S.canEdit,S.isOwner]=await Promise.all([user.id().catch(()=>null),user.canEdit().catch(()=>false),user.isOwner().catch(()=>false)]);
-  if (window.SupabaseOrderToken){
-    S.guestSessKey = await db.findSessionKeyByOrderToken(window.SupabaseOrderToken).catch(()=>null);
+  if (window.SupabaseManageToken){
+    S.fixedSessKey = await db.findSessionKeyByManageToken(window.SupabaseManageToken).catch(()=>null);
+  } else if (window.SupabaseOrderToken){
+    S.fixedSessKey = await db.findSessionKeyByOrderToken(window.SupabaseOrderToken).catch(()=>null);
+  } else {
+    S.fixedSessKey = null; // link gốc: không session nào, luôn vào màn tạo đơn
   }
   db.doc("config/main").onSnapshot(s=>{ S.config=s.exists?s.data():null; S.cfgLoaded=true; watchSession(); render(); }, err=>{ console.error(err); S.cfgLoaded=true; S.sessLoaded=true; render(); });
   db.collection("orders").onSnapshot(qs=>{ const m={}; qs.docs.forEach(d=>m[d.id]=d.data()); S.orders=m; S.ordersLoaded=true; render(); }, err=>{ console.error(err); S.ordersLoaded=true; render(); });
-  if (S.canEdit){
-    db.collection("dishes").onSnapshot(qs=>{ S.dishes=qs.docs.map(d=>({id:d.id,...d.data()})); render(); }, console.error);
-    db.collection("sessions").orderBy("createdAt","desc").limit(12).onSnapshot(qs=>{ S.recent=qs.docs.map(d=>({id:d.id,...d.data()})); render(); }, console.error);
-  }
+  // Thư viện món ("Chọn món đã từng có") cần cho MÀN TẠO ĐƠN — mà ai cũng
+  // tạo được đơn (không cần S.canEdit=true, khác các thao tác quản lý
+  // khác). Luôn load, không gate theo canEdit như trước.
+  db.collection("dishes").onSnapshot(qs=>{ S.dishes=qs.docs.map(d=>({id:d.id,...d.data()})); render(); }, console.error);
   render();
 })();
 </script>
