@@ -731,11 +731,15 @@ function cartView(){
   }
   // other members
   const others = ordersFor(curKey()).filter(o=>o.docId!==S.uid && !(c && o.docId===c.docId));
-  if (others.length && (host || S.config?.showPaymentToTeam!==false)){
+  // Luôn hiện khối này (kể cả khi chưa ai khác đặt) để guest biết tính
+  // năng "xem ai đang tham gia" tồn tại, cập nhật realtime khi có người
+  // đặt thêm — trước đây ẩn hẳn khi others.length===0 khiến guest tưởng
+  // không có cách nào thấy người khác.
+  if (host || S.config?.showPaymentToTeam!==false){
     html += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Thành viên đã đặt (${others.length})</h2>`;
     const shown = host ? filterList(others) : others;
     if (host) html += filterChips();
-    html += shown.map(o=>memberCard(o, host)).join("") || `<p class="muted">Không có đơn nào ở mục này.</p>`;
+    html += shown.map(o=>memberCard(o, host)).join("") || `<p class="muted">${others.length?"Không có đơn nào ở mục này.":"Chưa có ai khác đặt. Danh sách sẽ tự cập nhật khi có người đặt thêm."}</p>`;
     html += `</div>`;
   }
   if (host) html += `<div class="pad" style="text-align:center;margin-top:18px"><button class="link red" data-a="delete-group">Xoá đơn hàng nhóm</button></div>`;
