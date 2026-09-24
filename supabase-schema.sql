@@ -42,12 +42,15 @@ create table if not exists sessions (
   created_at bigint not null -- epoch ms
 );
 create index if not exists sessions_date_idx on sessions (date desc);
-create unique index if not exists sessions_order_token_idx on sessions (order_token);
--- Nếu bảng sessions đã tồn tại từ trước (thiếu cột order_token), thêm vào
--- và điền giá trị cho các session cũ để không có row nào bị null.
+-- Nếu bảng sessions đã tồn tại từ trước (thiếu cột order_token vì được
+-- tạo bởi bản schema cũ hơn — "create table if not exists" bỏ qua toàn
+-- bộ định nghĩa cột ở trên khi bảng đã có), thêm cột và điền giá trị cho
+-- các session cũ TRƯỚC khi tạo unique index bên dưới (thứ tự bắt buộc:
+-- index cần cột tồn tại và không null trước).
 alter table sessions add column if not exists order_token text;
 update sessions set order_token = encode(gen_random_bytes(12), 'hex') where order_token is null;
 alter table sessions alter column order_token set not null;
+create unique index if not exists sessions_order_token_idx on sessions (order_token);
 
 -- ---------- Bảng dishes (thư viện món) ----------
 create table if not exists dishes (

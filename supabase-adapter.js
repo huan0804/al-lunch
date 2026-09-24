@@ -89,11 +89,13 @@
           return;
         }
         if (coll==="sessions"){
-          // order_token: để DB tự sinh giá trị mặc định (xem cột default
-          // trong schema) khi tạo mới — không set ở đây để không ghi đè
-          // token đã có nếu đây thực ra là update qua set().
-          const row = { key: id, ...toDb(obj, SESSION_MAP) };
-          delete row.order_token;
+          // order_token: cột NOT NULL với DEFAULT ở DB, nhưng upsert() của
+          // PostgREST gửi tường minh mọi key của object — kể cả khi thiếu
+          // key này, một số đường upsert vẫn insert NULL thay vì để DEFAULT
+          // chạy. Sinh token ở client cho chắc. set() trong app chỉ dùng để
+          // TẠO session mới (bản sửa đơn cũ đi qua update(), không qua đây)
+          // nên không có rủi ro ghi đè order_token của session đã tồn tại.
+          const row = { key: id, order_token: rid()+rid()+rid(), ...toDb(obj, SESSION_MAP) };
           const { error } = await sb.from("sessions").upsert(row, { onConflict: "key" });
           if (error) throw error;
           return;

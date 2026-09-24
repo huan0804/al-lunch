@@ -792,7 +792,8 @@ function bankView(){
     <p class="small muted">1 món (gấp đôi) và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới.</p>
     <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của bạn (chủ trang) ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
     <div class="setting"><div class="t"><b>Cho cả team xem ai đã thanh toán</b><small>Chỉ hiện tên và trạng thái, không hiện món và số tiền</small></div><button class="toggle" role="switch" aria-checked="${f.showPaymentToTeam}" data-a="s-toggle" data-v="showPaymentToTeam"></button></div>
-    <label class="f" for="s-url" style="margin-top:8px">Link chia sẻ cho team</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
+    <label class="f" for="s-url" style="margin-top:8px">Domain của app (chỉ sửa khi đổi tên miền)</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
+    <p class="small muted">Đây KHÔNG phải link gửi cho team — mỗi đơn nhóm có link riêng, lấy ở nút "Mời thêm thành viên" trên trang chủ sau khi tạo đơn.</p>
   </div>
   <div class="bottom"><div class="in"><button class="cta" data-a="save-settings" ${S.busy?"disabled":""}>Lưu</button></div></div></div>`;
 }
