@@ -215,6 +215,12 @@ begin
   if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='config') then
     alter publication supabase_realtime add table config;
   end if;
+  -- dishes: thiếu ở đây từ đầu khiến xoá/thêm món trong thư viện không tự
+  -- cập nhật realtime cho người đang mở màn "Chọn món đã từng có" — xác
+  -- nhận qua test thật (xoá món thành công ở DB nhưng UI vẫn hiện).
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='dishes') then
+    alter publication supabase_realtime add table dishes;
+  end if;
 end $$;
 
 -- ============================================================
