@@ -643,9 +643,22 @@ function itemSheet(sh){
     ${sh.index!=null?`<button class="link red" style="display:block;margin:14px auto 0" data-a="sh-remove">Xoá khỏi giỏ hàng</button>`:""}
   </div>`;
 }
+// text KHÔNG kèm link (link truyền riêng qua navigator.share({url}) khi có
+// thể — xem case "share-app"). Gộp link dính liền vào text khiến Zalo (và
+// có thể các app khác) không nhận ra đây là 1 URL hợp lệ trong ACTION_SEND,
+// nên không kích hoạt UI chọn bạn/nhóm đầy đủ của app đó — xác nhận qua
+// so sánh với Grab app (dùng Intent gốc, EXTRA_TEXT tách biệt EXTRA_SUBJECT/
+// link) trong khi bản cũ gộp hết vào 1 chuỗi text.
 function shareMsg(){
+  const s=S.session; if(!s) return "";
+  return `🍱 ${hostName()} mời đặt cơm trưa ${fmtDate(s.date)}${s.shopName?` (${s.shopName})`:""}.\nChốt đơn lúc ${hhmm(deadlineAt(s))}. Vào chọn món tại:`;
+}
+// Bản đầy đủ (text + link dính liền) — dùng cho copy-invite/copyText, nơi
+// người nhận dán thẳng vào khung chat, cần link nằm ngay trong nội dung.
+function shareMsgFull(){
   const s=S.session; if(!s) return shareLink();
-  return `🍱 ${hostName()} mời đặt cơm trưa ${fmtDate(s.date)}${s.shopName?` (${s.shopName})`:""}.\nChốt đơn lúc ${hhmm(deadlineAt(s))}. Vào chọn món tại:\n${shareLink()}`;
+  const m=shareMsg();
+  return m ? `${m}\n${shareLink()}` : shareLink();
 }
 // permissionsPolicy/featurePolicy.allowsFeature("web-share") cho false
 // negative trên nhiều Android Chrome (feature không được liệt kê trong
@@ -654,7 +667,7 @@ function shareMsg(){
 // thật, promise của nó tự reject và có xử lý riêng ở nơi gọi.
 function canNativeShare(){ return !!navigator.share; }
 function shareSheet(){
-  const link=shareLink(), msg=shareMsg();
+  const link=shareLink(), msg=shareMsgFull();
   const app=(key,label,bg,ic)=>`<button data-a="share-app" data-v="${key}"><span class="ic" style="background:${bg}">${ic}</span>${label}</button>`;
   // navigator.share() chỉ mở ĐƯỢC MỘT hộp thoại — không có tham số nào để
   // "mở thẳng app X"; app nào được dùng là do người dùng tự chọn trong đó.
@@ -738,7 +751,12 @@ function myOrderCard(o){
   return `<div class="card"><div class="mem-head"><span class="avatar">${esc(o.name.trim()[0]||"?")}</span><div class="nm">${esc(o.name)}${o.guests?.length?`<div class="small muted" style="font-weight:500">${esc(guestsNote(o))}</div>`:""}</div><span class="badge ${cls}">${l}</span></div>
     ${groupedLines(o)}
     <div class="between" style="border-top:1px solid var(--line);padding-top:10px"><b>${o.guests?.length?`Tổng cho ${o.guests.length+1} người`:"Tổng"}</b><b class="num" style="font-size:18px">${money(o.total)}</b></div>
-    ${(!locked||S.canEdit)?`<div class="row" style="margin-top:12px"><button class="btn" data-a="edit-own">Sửa đơn</button><button class="btn danger" data-a="cancel-own">Huỷ đơn</button></div>`:`<p class="small muted" style="margin:10px 0 0">Đơn đã chốt, liên hệ trưởng nhóm nếu cần thay đổi.</p>`}</div>`;
+    ${!locked?`<div class="row" style="margin-top:12px"><button class="btn" data-a="edit-own">Sửa đơn</button><button class="btn danger" data-a="cancel-own">Huỷ đơn</button></div>`
+      // Khi đã khoá, host KHÔNG còn thấy "Sửa đơn" ở đây nữa — nó trùng
+      // chức năng với "Mở để sửa" trong hostSummary(), tránh 2 nút cùng
+      // làm 1 việc. Member (không phải host) không có "Mở để sửa" nên vẫn
+      // chỉ thấy thông báo liên hệ trưởng nhóm như cũ.
+      :(S.canEdit?"":`<p class="small muted" style="margin:10px 0 0">Đơn đã chốt, liên hệ trưởng nhóm nếu cần thay đổi.</p>`)}</div>`;
 }
 function payBlock(o){
   let b="";
@@ -939,25 +957,29 @@ async function onClick(e){
       else { S.md.bankBin=v; S.md.bankName=BANKS.find(b=>b[1]===v)?.[0]||""; }
       S.sheet=null; break; }
     case "copy": copyText(b.dataset.t); return;
-    case "copy-invite": copyText(shareMsg(), "Đã copy tin nhắn mời, dán vào nhóm chat nhé"); return;
+    case "copy-invite": copyText(shareMsgFull(), "Đã copy tin nhắn mời, dán vào nhóm chat nhé"); return;
     case "share-app": {
-      const link=shareLink(), msg=shareMsg(), enc=encodeURIComponent;
+      const link=shareLink(), msg=shareMsg(), full=shareMsgFull(), enc=encodeURIComponent;
       // "native": nút "Chia sẻ" duy nhất khi máy có navigator.share() — xem
       // shareSheet(). Mở share sheet chuẩn của hệ điều hành; người dùng tự
-      // chọn Zalo/Facebook/… đã đăng nhập sẵn từ đó, kể cả chọn thẳng bạn/
-      // nhóm nếu app đó hỗ trợ (Zalo, Facebook đều hỗ trợ trên luồng share
-      // sheet chuẩn — không hỗ trợ khi bị ép mở qua Intent package cụ thể
-      // hoặc URL web sharer.php, đã xác nhận qua test).
-      if (v==="native"){ try{ await navigator.share({title:"Cơm trưa team", text:msg}); }catch(err){ if(err?.name!=="AbortError") copyText(msg,"Không mở được bảng chia sẻ. Đã copy tin nhắn, hãy dán vào nhóm chat"); } return; }
+      // chọn Zalo/Facebook/… đã đăng nhập sẵn từ đó.
+      // QUAN TRỌNG: truyền text và url TÁCH RIÊNG (không dính chuỗi lại làm
+      // 1 như bản cũ) — Zalo (và nhiều app khác nhận ACTION_SEND) chỉ nhận
+      // ra đây là link hợp lệ và kích hoạt UI chọn bạn/nhóm đầy đủ của nó
+      // khi EXTRA_TEXT chứa URL rõ ràng ở field riêng; gộp text+link thành
+      // 1 khối khiến Zalo xử lý như "share text thô", bỏ qua UI đầy đủ —
+      // xác nhận bằng cách so sánh với app Grab (dùng Intent gốc, luôn
+      // tách title/text/url) cho đúng kết quả người dùng mong đợi.
+      if (v==="native"){ try{ await navigator.share({title:"Cơm trưa team", text:msg, url:link}); }catch(err){ if(err?.name!=="AbortError") copyText(full,"Không mở được bảng chia sẻ. Đã copy tin nhắn, hãy dán vào nhóm chat"); } return; }
       // Các nhánh dưới đây CHỈ còn chạy trên máy KHÔNG có navigator.share
       // (desktop) — ở đó 3 app thực sự khác nhau nên vẫn đáng để tách riêng.
       const names={zalo:"Zalo",teams:"Teams",facebook:"Facebook"};
       if (v==="zalo"){
-        await copyText(msg, "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
+        await copyText(full, "Đã copy tin nhắn. Đang mở Zalo Web, chọn nhóm rồi dán (Ctrl+V)");
         try{ window.open("https://chat.zalo.me/", "_blank", "noopener"); }catch{}
         return;
       }
-      await copyText(msg, `Đã copy tin nhắn. Mở ${names[v]} và dán vào nhóm`);
+      await copyText(full, `Đã copy tin nhắn. Mở ${names[v]} và dán vào nhóm`);
       const url = v==="teams" ? `https://teams.microsoft.com/share?href=${enc(link)}&msgText=${enc(msg)}` : v==="facebook" ? `https://www.facebook.com/sharer/sharer.php?u=${enc(link)}` : "";
       if (url){ try{ window.open(url, "_blank", "noopener"); }catch{} }
       return; }
