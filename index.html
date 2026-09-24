@@ -207,15 +207,16 @@ table{width:100%;border-collapse:collapse}
 // là token bí mật của host) để không lỡ tay gửi nhầm quyền host cho team.
 const ARTIFACT_URL = (window.SUPABASE_SHARE_URL || (location.origin + location.pathname)).split("?")[0].split("#")[0];
 /* ================= Helpers ================= */
+// [tên hiển thị, mã BIN (dùng trong payload VietQR), mã chữ (dùng cho URL logo api.vietqr.io/img/<code>.png)]
 const BANKS = [
-  ["Vietcombank","970436"],["VietinBank","970415"],["BIDV","970418"],["Agribank","970405"],
-  ["Techcombank","970407"],["MB Bank","970422"],["ACB","970416"],["VPBank","970432"],
-  ["TPBank","970423"],["Sacombank","970403"],["HDBank","970437"],["VIB","970441"],
-  ["SHB","970443"],["Eximbank","970431"],["MSB","970426"],["OCB","970448"],
-  ["SeABank","970440"],["LPBank","970449"],["Nam A Bank","970428"],["Bac A Bank","970409"],
-  ["BVBank (Timo)","970454"],["ABBANK","970425"],["PVcomBank","970412"],["Kienlongbank","970452"],
-  ["NCB","970419"],["VietABank","970427"],["Cake by VPBank","546034"],["Shinhan Bank","970424"],
-  ["Woori Bank","970457"],["UOB","970458"]
+  ["Vietcombank","970436","VCB"],["VietinBank","970415","ICB"],["BIDV","970418","BIDV"],["Agribank","970405","VBA"],
+  ["Techcombank","970407","TCB"],["MB Bank","970422","MB"],["ACB","970416","ACB"],["VPBank","970432","VPB"],
+  ["TPBank","970423","TPB"],["Sacombank","970403","STB"],["HDBank","970437","HDB"],["VIB","970441","VIB"],
+  ["SHB","970443","SHB"],["Eximbank","970431","EIB"],["MSB","970426","MSB"],["OCB","970448","OCB"],
+  ["SeABank","970440","SEAB"],["LPBank","970449","LPB"],["Nam A Bank","970428","NAB"],["Bac A Bank","970409","BAB"],
+  ["BVBank (Timo)","970454","VCCB"],["ABBANK","970425","ABB"],["PVcomBank","970412","PVCB"],["Kienlongbank","970452","KLB"],
+  ["NCB","970419","NCB"],["VietABank","970427","VAB"],["Cake by VPBank","546034","CAKE"],["Shinhan Bank","970424","SHBVN"],
+  ["Woori Bank","970457","WVN"],["UOB","970458","UOB"]
 ];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = n => Math.round(Number(n)||0).toLocaleString("vi-VN") + "đ";
@@ -376,6 +377,18 @@ function validate(c){
 }
 async function submitCart(){
   const c=S.cart; if (validate(c) || S.busy) return;
+  // Host xác nhận ĐÚNG đơn của chính mình (không phải đặt hộ ai khác qua
+  // "proxy-xxxx") => hành động này đồng thời khoá toàn bộ đơn nhóm, thay
+  // cho nút "Chốt đơn" riêng đã bỏ. Hỏi xác nhận trước vì không có cách
+  // nào biết chắc ai khác đang dở dang chọn món (dữ liệu đó chỉ nằm trong
+  // trình duyệt của họ, chưa lên server) — xem memory/al-lunch-migration.
+  // Hỏi xác nhận + khoá lại MỌI LẦN host bấm xác nhận đơn của mình, kể cả
+  // khi đơn đang mở lại để sửa (status="open" nhưng trước đó đã từng
+  // closed) — không chỉ lần đầu — để hành vi "xác nhận = khoá" nhất quán.
+  const isHostSelf = S.canEdit && c.docId===S.uid;
+  if (isHostSelf){
+    if (!(await ask("Xác nhận đặt món sẽ khoá đơn nhóm lại — không ai đặt hay sửa thêm được nữa. Bạn chắc đã đủ người đặt chưa?", "Xác nhận và khoá đơn"))) return;
+  }
   const base=unitPrice();
   const sets=c.items.map(it=>({ dishes: it.picks.map(id=>({ id, name: dishById(id)?.nameVi || it.names[id] || "?", portions: it.picks.length===1?2:1 })), note: it.note.trim(), qty: it.qty, price: setPrice(it.picks.length, base), for: c.guests.find(g=>g.id===it.for)?.name || null }));
   const total=sets.reduce((a,s)=>a+s.price*s.qty,0);
@@ -387,9 +400,10 @@ async function submitCart(){
   S.busy=true; render();
   try{
     await mutateOrder(c.docId, c.date, ()=>order);
+    if (isHostSelf) await S.db.doc("sessions/"+c.date).update({status:"closed"});
     if (c.docId===S.uid) lsSet("comtrua:name", order.name);
     S.cart=null; S.view="cart";
-    toast(reset ? "Đã lưu. Tổng tiền hoặc hình thức thay đổi nên trạng thái thanh toán được đặt lại." : "Đặt món thành công");
+    toast(isHostSelf ? "Đã đặt món và khoá đơn nhóm. Gửi danh sách bên dưới cho quán nhé." : reset ? "Đã lưu. Tổng tiền hoặc hình thức thay đổi nên trạng thái thanh toán được đặt lại." : "Đặt món thành công");
   }catch(e){ writeErr(e); }
   S.busy=false; render(); window.scrollTo({top:0});
 }
@@ -574,7 +588,7 @@ function bankPickSheet(sh){
   return `<div class="scrim" data-a="sh-close"></div><div class="sheet" role="dialog" aria-label="Chọn ngân hàng">
     <div class="grab"></div><div class="between"><h3>Chọn ngân hàng</h3><button class="icon" data-a="sh-close" aria-label="Đóng">${I.close}</button></div>
     <input type="search" id="bank-q" data-f="bank-q" value="${esc(sh.q||"")}" placeholder="Tìm ngân hàng…" autofocus>
-    <div class="lib" style="margin-top:10px">${list.map(b=>`<button class="opt" data-a="bank-pick" data-v="${b[1]}"><span class="t"><img class="bank-logo" src="https://api.vietqr.io/img/${b[1]}.png" alt="" onerror="this.style.display='none'"><b>${esc(b[0])}</b></span></button>`).join("")||`<p class="small muted">Không tìm thấy.</p>`}
+    <div class="lib" style="margin-top:10px">${list.map(b=>`<button class="opt" data-a="bank-pick" data-v="${b[1]}"><span class="t"><img class="bank-logo" src="https://api.vietqr.io/img/${b[2]}.png" alt="" onerror="this.style.display='none'"><b>${esc(b[0])}</b></span></button>`).join("")||`<p class="small muted">Không tìm thấy.</p>`}
     <button class="opt" data-a="bank-pick" data-v="other"><span class="t"><b>Ngân hàng khác (nhập mã BIN)</b></span></button></div>
   </div>`;
 }
@@ -768,7 +782,11 @@ function hostSummary(){
   list.forEach(o=>o.sets.forEach(st=>{ const q=qtyOf(st); st.dishes.forEach(d=>portions[d.name]=(portions[d.name]||0)+d.portions*q); if(st.dishes.length===1) doubles[st.dishes[0].name]=(doubles[st.dishes[0].name]||0)+q; if(st.note) notes.push(`${st.for||o.name} (${q>1?q+"x ":""}${setLabel(st)}): ${st.note}`); }));
   const people=[]; list.forEach(o=>groupSets(o).forEach(g=>people.push(`- ${g.who}${g.self?"":` (${o.name} đặt hộ)`}: ${g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [${st.note}]`:"")).join("; ")}`)));
   const rows=Object.entries(portions).sort((a,b)=>b[1]-a[1]);
-  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n`+rows.map(([n,c])=>`- ${n}: ${c} phần${doubles[n]?` (có ${doubles[n]} suất gấp đôi)`:""}`).join("\n")+(notes.length?`\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"")+`\n\nTheo người (${people.length} người):\n`+people.join("\n");
+  // Copy gửi quán chỉ liệt kê THEO NGƯỜI (ai đặt gì) — bỏ phần tổng hợp
+  // theo món (rows) khỏi text copy theo yêu cầu; rows vẫn dùng để hiển thị
+  // trong khối "Tổng món gửi quán" trên UI bên dưới (details/summary), chỉ
+  // không đưa vào nội dung copy nữa.
+  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n\nTheo người (${people.length} người):\n`+people.join("\n")+(notes.length?`\n\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"");
   const rec=list.filter(o=>o.payMethod!=="host"&&o.payStatus==="confirmed"), cash=list.filter(o=>o.payMethod==="cash"&&o.payStatus!=="confirmed"), tf=list.filter(o=>o.payMethod==="transfer"&&o.payStatus!=="confirmed");
   const sum=a=>a.reduce((x,o)=>x+o.total,0), unpaid=[...tf,...cash];
   const unpaidText=`Cơm ${fmtDate(s.date)}, còn chưa thanh toán:\n`+unpaid.map(o=>`- ${o.name}${o.guests?.length?` (gồm ${o.guests.join(", ")})`:""}: ${money(o.total)}${o.payMethod==="cash"?" (tiền mặt)":""}`).join("\n");
@@ -784,9 +802,9 @@ function hostSummary(){
       <div class="row" style="margin-top:6px">
         <button class="btn" data-a="copy" data-t="${esc(kitchen)}" ${list.length?"":"disabled"}>Copy tổng đơn gửi quán</button>
         <button class="btn" data-a="copy" data-t="${esc(unpaidText)}" ${unpaid.length?"":"disabled"}>Copy DS chưa trả</button>
-        
-        ${closed?`<button class="btn" data-a="reopen">Mở lại</button>`:`<button class="btn dark" data-a="close">Chốt đơn</button>`}
+        ${closed?`<button class="btn" data-a="reopen">Mở để sửa</button>`:""}
       </div>
+      ${closed?`<p class="small muted" style="margin:10px 0 0">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm "Mở để sửa" nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p>`:""}
       <p class="small muted" style="margin:10px 0 0">Đối chiếu app ngân hàng theo nội dung <b>${esc(transferInfo(s.date,"").trim())} TÊN</b>, rồi bấm xác nhận ở từng thành viên.</p>
     </div></div>`;
 }
@@ -801,8 +819,9 @@ function createView(){
   const ai=S.ai;
   const until=hhmm(Date.now()+md.minutes*60000);
   const bankKnown = BANKS.some(b=>b[1]===md.bankBin);
+  const bankCode = BANKS.find(b=>b[1]===md.bankBin)?.[2];
   const bankPreview = md.accountNo && /^\d{6}$/.test(md.bankBin) ? qrSvg(vietqr(md.bankBin, md.accountNo.trim(), 0, "")) : "";
-  const bankLogo = /^\d{6}$/.test(md.bankBin) ? `<img class="bank-logo" src="https://api.vietqr.io/img/${md.bankBin}.png" alt="" onerror="this.style.display='none'">` : "";
+  const bankLogo = bankCode ? `<img class="bank-logo" src="https://api.vietqr.io/img/${bankCode}.png" alt="" onerror="this.style.display='none'">` : "";
   const bankLine = md.accountNo ? `${esc(md.bankName||"")} ${esc(String(md.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
   const canClose = live || !!S.fixedSessKey; // link gốc tạo đơn mới: không có "trang trước" để đóng về
   return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
@@ -979,7 +998,6 @@ async function onClick(e){
     case "row-edit": { const o=S.orders[v]?.days?.[date]; if(!o) return; S.cart=newCart(v,o,v!==S.uid); window.scrollTo({top:0}); break; }
     case "proxy": S.cart=newCart("proxy-"+rid(), null, true); S.view="home"; toast("Chọn món cho người được đặt hộ"); window.scrollTo({top:0}); break;
     case "filter": S.filter=v; break;
-    case "close": try{ await S.db.doc("sessions/"+date).update({status:"closed"}); toast("Đã chốt đơn"); }catch(err){ writeErr(err); } break;
     case "reopen": try{ await S.db.doc("sessions/"+date).update({status:"open", autoClose:false}); toast("Đã mở lại, tự chốt đã tắt"); }catch(err){ writeErr(err); } break;
     case "delete-group": if(!(await ask("Xoá đơn hàng nhóm này? Mọi người sẽ không vào đặt được nữa.","Xoá đơn hàng nhóm",true))) return;
       // Sau khi xoá, link ?manage= này không còn trỏ tới session nào —
