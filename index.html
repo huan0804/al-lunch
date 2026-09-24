@@ -837,10 +837,9 @@ function hostSummary(){
       <div class="row" style="margin-top:6px">
         <button class="btn" data-a="copy" data-t="${esc(kitchen)}" ${list.length?"":"disabled"}>Copy tổng đơn gửi quán</button>
         <button class="btn" data-a="copy" data-t="${esc(unpaidText)}" ${unpaid.length?"":"disabled"}>Copy DS chưa trả</button>
-        ${closed?`<button class="btn" data-a="reopen">Mở để sửa</button>`:""}
       </div>
-      ${closed?`<p class="small muted" style="margin:10px 0 0">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm "Mở để sửa" nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p>`:""}
       <p class="small muted" style="margin:10px 0 0">Đối chiếu app ngân hàng theo nội dung <b>${esc(transferInfo(s.date,"").trim())} TÊN</b>, rồi bấm xác nhận ở từng thành viên.</p>
+      ${closed?`<div class="band" style="margin:16px -20px"></div><p class="small muted" style="margin:0 0 8px">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm nút dưới đây nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p><button class="btn dark" style="width:100%" data-a="reopen">${I.pen} Mở để sửa</button>`:""}
     </div>
     ${closed && people.length ? `<div class="card" style="margin-top:12px">
       <div class="between"><b style="font-size:17px">Danh sách gửi quán</b><button class="btn" data-a="copy" data-t="${esc(kitchen)}">${I.link} Copy</button></div>
@@ -1040,7 +1039,11 @@ async function onClick(e){
     case "row-edit": { const o=S.orders[v]?.days?.[date]; if(!o) return; S.cart=newCart(v,o,v!==S.uid); window.scrollTo({top:0}); break; }
     case "proxy": S.cart=newCart("proxy-"+rid(), null, true); S.view="home"; toast("Chọn món cho người được đặt hộ"); window.scrollTo({top:0}); break;
     case "filter": S.filter=v; break;
-    case "reopen": try{ await S.db.doc("sessions/"+date).update({status:"open", autoClose:false}); toast("Đã mở lại, tự chốt đã tắt"); }catch(err){ writeErr(err); } break;
+    case "reopen": try{
+      await S.db.doc("sessions/"+date).update({status:"open", autoClose:false});
+      S.cart=newCart(S.uid, mine()); // đi thẳng vào form sửa đơn của host, không cần bấm thêm "Sửa đơn" nữa
+      toast("Đã mở lại, tự chốt đã tắt");
+    }catch(err){ writeErr(err); } break;
     case "delete-group": if(!(await ask("Xoá đơn hàng nhóm này? Mọi người sẽ không vào đặt được nữa.","Xoá đơn hàng nhóm",true))) return;
       // Sau khi xoá, link ?manage= này không còn trỏ tới session nào —
       // homeView() sẽ tự hiện "Không tìm thấy đơn nhóm này" (S.session=null).
