@@ -285,7 +285,12 @@ const priceRule = (b=unitPrice()) => `1 món được gấp đôi (${money(b)}),
 const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
 const curDate = () => S.session?.date;
 const curKey = () => S.sessKey;
-const shareLink = () => S.config?.shareUrl || ARTIFACT_URL;
+// Link gửi cho team: link gốc (ARTIFACT_URL, không query) + ?order=<order_token>
+// của session đang xem — đúng đơn nhóm đó, không có quyền quản lý.
+const shareLink = () => {
+  const base = (S.config?.shareUrl || ARTIFACT_URL).split("?")[0].split("#")[0];
+  return S.session?.orderToken ? `${base}?order=${S.session.orderToken}` : base;
+};
 function setLabel(s){ const ds=s.dishes||[]; return ds.length===1 ? `${ds[0].name} (x2 gấp đôi)` : ds.map(d=>d.name).join(" + "); }
 function deadlineAt(s){ if(!s) return 0; if (s.deadlineAt) return s.deadlineAt; if (s.deadline){ const [h,m]=s.deadline.split(":").map(Number); const d=new Date(s.date+"T00:00:00"); d.setHours(h,m,0,0); return d.getTime(); } return 0; }
 function isLocked(){
@@ -312,17 +317,12 @@ const hostName = () => S.session?.hostName || "trưởng nhóm";
 
 /* ================= DB ================= */
 function writeErr(e){
-  if (e?.code==="invalid_argument") toast("Bạn cần mở đúng link quản lý (link trưởng nhóm) để làm thao tác này.");
-  else if (e?.code==="invalid_token") toast("Link quản lý không hợp lệ hoặc đã hết hạn.");
-  else toast("Không lưu được, thử lại sau ít giây.");
+  toast("Không lưu được, thử lại sau ít giây.");
   console.error(e);
 }
 async function mutateOrder(docId, date, fn){ await S.db.mutateOrder(docId, date, fn); }
 async function setPay(docId, patch){
-  try{
-    if (docId===S.uid) await mutateOrder(docId, curKey(), o=>o?{...o,...patch,updatedAt:Date.now()}:null);
-    else await window.hostSetOrderPay(curKey(), docId, patch.payStatus);
-  }catch(e){ writeErr(e); }
+  try{ await mutateOrder(docId, curKey(), o=>o?{...o,...patch,updatedAt:Date.now()}:null); }catch(e){ writeErr(e); }
 }
 
 /* ================= Cart ================= */
@@ -444,9 +444,10 @@ async function publishGroup(){
       if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), (it.nameEn||"").trim());
     }
     const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut}));
-    await window.hostUpsertSession({ key, date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000),
-      menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim() });
-    if (isNew && prevKey && prevKey!==key){ try{ const ps=await S.db.doc("sessions/"+prevKey).get(); if(ps.exists && ps.data().status!=="closed") await window.hostSetSessionStatus(prevKey,"closed"); }catch{} }
+    const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim() };
+    if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
+    else await S.db.doc("sessions/"+key).update(fields);
+    if (isNew && prevKey && prevKey!==key){ try{ const ps=await S.db.doc("sessions/"+prevKey).get(); if(ps.exists && ps.data().status!=="closed") await S.db.doc("sessions/"+prevKey).update({status:"closed"}); }catch{} }
     if (S.config.current!==key) await S.db.doc("config/main").update({current:key});
     S.viewKey=null; S.cart=null;
     lsSet("comtrua:name", md.hostName.trim());
@@ -953,7 +954,10 @@ setInterval(()=>{ if(S.session && !S.sheet) render(); }, 60000);
 /* ================= Boot ================= */
 let unSess=null, curSess;
 function watchSession(){
-  const id=S.viewKey||S.config?.current||null; if(id===curSess) return; curSess=id; S.sessKey=id;
+  // Link đơn của guest (?order=...) luôn ghim đúng 1 session, bất kể
+  // config.current đổi thế nào — S.guestSessKey được resolve 1 lần trong boot().
+  const id = S.guestSessKey!==undefined ? S.guestSessKey : (S.viewKey||S.config?.current||null);
+  if(id===curSess) return; curSess=id; S.sessKey=id;
   unSess?.(); S.session=null;
   if(!id){ S.sessLoaded=true; render(); return; }
   S.sessLoaded=false;
@@ -964,6 +968,9 @@ function watchSession(){
   const {db,user,sample}=window.SupabaseAdapter;
   S.db=db; S.sample=sample; S.imagesOK=false; // đọc ảnh AI chưa khả dụng trong bản Supabase, xem PROJECT_HANDOFF.md
   if (user) [S.uid,S.canEdit,S.isOwner]=await Promise.all([user.id().catch(()=>null),user.canEdit().catch(()=>false),user.isOwner().catch(()=>false)]);
+  if (window.SupabaseOrderToken){
+    S.guestSessKey = await db.findSessionKeyByOrderToken(window.SupabaseOrderToken).catch(()=>null);
+  }
   db.doc("config/main").onSnapshot(s=>{ S.config=s.exists?s.data():null; S.cfgLoaded=true; watchSession(); render(); }, err=>{ console.error(err); S.cfgLoaded=true; S.sessLoaded=true; render(); });
   db.collection("orders").onSnapshot(qs=>{ const m={}; qs.docs.forEach(d=>m[d.id]=d.data()); S.orders=m; S.ordersLoaded=true; render(); }, err=>{ console.error(err); S.ordersLoaded=true; render(); });
   if (S.canEdit){
