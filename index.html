@@ -165,10 +165,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand)}
 .drop.over{border-color:var(--brand);background:var(--brand-soft)}
 .drop img{max-width:100%;max-height:160px;border-radius:8px;margin-top:10px}
 .lib{max-height:260px;overflow:auto;border:1.5px solid var(--line);border-radius:12px;margin-top:8px;padding:0 12px}
-.mrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.mrow{display:grid;grid-template-columns:1fr 100px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .mrow:last-child{border-bottom:0}
-.mrow .en{grid-column:1/2}
-.mrow .price{grid-column:2/4;width:110px;justify-self:end}
 details.more summary{cursor:pointer;font-weight:600;padding:10px 0;list-style:none;display:flex;justify-content:space-between}
 details.more summary::-webkit-details-marker{display:none}
 
@@ -463,18 +461,18 @@ function ensureMd(mode){
     accountName: live ? (s.accountName||"") : (lastBank?.accountName||"") };
 }
 function libMatch(name){ const n=norm(name); return S.dishes.find(d=>norm(d.nameVi)===n); }
-function addDraftItem(vi, en=""){
+function addDraftItem(vi){
   vi=vi.trim(); if(!vi) return false;
   if (S.md.items.some(x=>norm(x.nameVi)===norm(vi))) return false;
   const m=libMatch(vi);
-  S.md.items.push(m ? {id:m.id,nameVi:m.nameVi,nameEn:m.nameEn||en,soldOut:false} : {id:null,nameVi:vi,nameEn:en,soldOut:false});
+  S.md.items.push(m ? {id:m.id,nameVi:m.nameVi} : {id:null,nameVi:vi});
   return true;
 }
 const AI_PROMPT = `Ảnh đính kèm là thực đơn cơm trưa hôm nay của một quán cơm Việt Nam.
 Liệt kê TẤT CẢ các món ăn có trong ảnh theo đúng thứ tự xuất hiện.
-Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"nameVi": "tên món tiếng Việt, có dấu, đúng chính tả", "nameEn": "tên tiếng Anh nếu ảnh có ghi, không có thì để chuỗi rỗng"}.
+Chỉ trả về một mảng JSON, mỗi phần tử có dạng {"nameVi": "tên món tiếng Việt, có dấu, đúng chính tả"}.
 Bỏ qua tiêu đề, giá tiền, ngày tháng, số điện thoại và những dòng không phải món ăn.
-Ví dụ: [{"nameVi":"Thịt kho trứng","nameEn":"Braised pork with eggs"}]`;
+Ví dụ: [{"nameVi":"Thịt kho trứng"}]`;
 function aiErr(code){
   return ({ not_granted:"Bạn chưa cho phép dùng Claude để đọc ảnh. Có thể dán text hoặc chọn từ thư viện món.",
     rate_limited:"Đang gửi quá nhiều yêu cầu, đợi một chút rồi thử lại.",
@@ -490,7 +488,7 @@ async function readMenuImage(file){
   try{
     const res=await S.sample.json(AI_PROMPT,{images:file});
     const arr=Array.isArray(res)?res:(Array.isArray(res?.dishes)?res.dishes:[]);
-    let n=0; for(const x of arr){ if(addDraftItem(String(x?.nameVi||""), String(x?.nameEn||"").trim())) n++; }
+    let n=0; for(const x of arr){ if(addDraftItem(String(x?.nameVi||""))) n++; }
     S.ai={busy:false, preview:S.ai.preview, msg: n?`Đã thêm ${n} món từ ảnh. Kiểm tra lại tên món bên dưới.`:"Không có món mới nào được thêm."};
   }catch(e){ S.ai={busy:false, preview:S.ai.preview, err:aiErr(e?.code)}; }
   render();
@@ -511,10 +509,10 @@ async function publishGroup(){
     const snap=await (async()=>{ try{ return await S.db.doc("sessions/"+key).get(); }catch{ return {exists:false}; } })();
     const isNew=!snap.exists;
     for (const it of md.items){
-      if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), (it.nameEn||"").trim()); continue; }
-      if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), (it.nameEn||"").trim());
+      if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), ""); continue; }
+      if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), "");
     }
-    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut,price:x.price!=null?Number(x.price):null}));
+    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),price:x.price!=null?Number(x.price):null}));
     const bank={ bankBin:md.bankBin, bankName:md.bankName, accountNo:md.accountNo.trim(), accountName:ascii(md.accountName) };
     const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim(), ...bank };
     if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
@@ -621,7 +619,7 @@ function homeView(){
   const m=s.menu||[];
   const menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
       <p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>
-      ${m.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</div>
+      ${m.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b></div>
         ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}
     </div>`;
   let bar="";
@@ -682,7 +680,7 @@ function itemSheet(sh){
   const multi = sh.index==null && (S.cart?.guests?.length||0)>0;
   const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
   const opts=m.map(d=>{ const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
-    return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
+    return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b></span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
   const label = n===0 ? "Chọn ít nhất 1 món" : `${n} món: ${money(setPrice(cur.picks,base))}`;
   const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
   const total = filled.reduce((a,[,x])=>a+setPrice(x.picks,base)*x.qty,0);
@@ -920,7 +918,7 @@ function hostSummary(){
 function createView(){
   ensureMd(); const md=S.md, c=S.config, live=md.mode==="edit";
   const q=norm(S.libQ);
-  const lib=S.dishes.filter(d=>!q||norm(d.nameVi).includes(q)||norm(d.nameEn).includes(q)).sort((a,b)=>(b.timesUsed||0)-(a.timesUsed||0)||String(b.lastUsed||"").localeCompare(String(a.lastUsed||"")));
+  const lib=S.dishes.filter(d=>!q||norm(d.nameVi).includes(q)).sort((a,b)=>(b.timesUsed||0)-(a.timesUsed||0)||String(b.lastUsed||"").localeCompare(String(a.lastUsed||"")));
   const inMenu=id=>md.items.some(x=>x.id===id);
   const last=live?null:lastMenuLocal();
   const ai=S.ai;
@@ -962,7 +960,7 @@ function createView(){
       <details class="more" data-k="lib" ${S.open.lib!==false?"open":""}><summary><span>Chọn món đã từng có (${S.dishes.length})</span>${I.chev}</summary>
         ${last?.menu?.length?`<button class="btn" data-a="md-copy-last" style="margin-bottom:8px">Copy thực đơn lần trước${last.shopName?` (${esc(last.shopName)})`:""}</button>`:""}
         ${S.dishes.length?`<input type="search" id="lib-q" data-f="lib-q" value="${esc(S.libQ)}" placeholder="Tìm món…">
-        <div class="lib">${lib.map(d=>`<div class="opt" style="display:flex;align-items:center;gap:8px"><button role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}" style="flex:1;display:flex;align-items:center;gap:14px;border:0;background:none;padding:0;cursor:pointer;text-align:left"><span class="t"><b>${esc(d.nameVi)}</b><small>${d.nameEn?esc(d.nameEn)+", ":""}đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button><button class="icon" data-a="lib-del" data-v="${esc(d.id)}" aria-label="Xoá ${esc(d.nameVi)} khỏi thư viện" title="Xoá khỏi thư viện" style="flex:none">${I.close}</button></div>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
+        <div class="lib">${lib.map(d=>`<div class="opt" style="display:flex;align-items:center;gap:8px"><button role="checkbox" aria-checked="${inMenu(d.id)}" data-a="md-lib" data-v="${esc(d.id)}" style="flex:1;display:flex;align-items:center;gap:14px;border:0;background:none;padding:0;cursor:pointer;text-align:left"><span class="t"><b>${esc(d.nameVi)}</b><small>đã dùng ${d.timesUsed||0} lần</small></span><span class="cbox">${inMenu(d.id)?I.check:""}</span></button><button class="icon" data-a="lib-del" data-v="${esc(d.id)}" aria-label="Xoá ${esc(d.nameVi)} khỏi thư viện" title="Xoá khỏi thư viện" style="flex:none">${I.close}</button></div>`).join("")||`<p class="small muted">Không tìm thấy món.</p>`}</div>`:`<p class="small muted">Thư viện trống. Các món bạn thêm sẽ được lưu lại để lần sau chọn nhanh.</p>`}
       </details>
       <details class="more" data-k="text" ${S.open.text?"open":""}><summary><span>Dán text menu</span>${I.chev}</summary>
         <textarea id="md-text" data-f="md-text" placeholder="Mỗi dòng một món">${esc(md.text||"")}</textarea>
@@ -970,9 +968,8 @@ function createView(){
       </details>
       <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
       ${md.items.map((x,i)=>`<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
-        <button class="btn ${x.soldOut?"danger":""}" data-a="md-out" data-i="${i}">${x.soldOut?"Hết món":"Còn"}</button><button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button>
-        <input type="text" class="en" id="mde-${i}" data-f="md-en" data-i="${i}" value="${esc(x.nameEn||"")}" placeholder="Tên tiếng Anh (tuỳ chọn)" aria-label="Tên tiếng Anh món ${i+1}">
-        <input type="number" class="price" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)"></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+        <input type="number" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)">
+        <button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
       ${md.items.length?`<p class="small muted" style="margin-top:8px">Để trống ô giá = tính theo giá suất thường. Nhập giá riêng nếu món này giá khác — chỉ áp dụng khi suất chỉ chọn 1 mình món đó.</p>`:""}
     </div>
     <div class="bottom"><div class="in"><button class="cta" data-a="publish" ${S.busy||!md.items.length?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${live?"Cập nhật đơn hàng nhóm":"Tạo đơn hàng nhóm"}</button></div></div>
@@ -1124,17 +1121,16 @@ async function onClick(e){
     case "pick-file": document.getElementById("file")?.click(); return;
     case "md-min": S.md.minutes=Math.max(5,Math.min(600,S.md.minutes+Number(v))); break;
     case "md-auto": S.md.autoClose=!S.md.autoClose; break;
-    case "md-lib": { const d=S.dishes.find(x=>x.id===v), k=S.md.items.findIndex(x=>x.id===v); if(k>=0) S.md.items.splice(k,1); else if(d) S.md.items.push({id:d.id,nameVi:d.nameVi,nameEn:d.nameEn||"",soldOut:false}); break; }
+    case "md-lib": { const d=S.dishes.find(x=>x.id===v), k=S.md.items.findIndex(x=>x.id===v); if(k>=0) S.md.items.splice(k,1); else if(d) S.md.items.push({id:d.id,nameVi:d.nameVi}); break; }
     case "lib-del": {
       const d=S.dishes.find(x=>x.id===v); if(!d) return;
       if (!(await ask(`Xoá "${d.nameVi}" khỏi thư viện món? Không ảnh hưởng thực đơn đang soạn.`, "Xoá", true))) return;
       try{ await window.deleteDish(v); toast("Đã xoá khỏi thư viện"); }catch(err){ writeErr(err); }
       break; }
-    case "md-copy-last": { const last=lastMenuLocal(); let n=0; last?.menu?.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi,nameEn:x.nameEn||"",soldOut:false}); n++; } }); toast(`Đã thêm ${n} món`); break; }
+    case "md-copy-last": { const last=lastMenuLocal(); let n=0; last?.menu?.forEach(x=>{ if(!S.md.items.some(y=>y.id===x.id||norm(y.nameVi)===norm(x.nameVi))){ S.md.items.push({id:x.id,nameVi:x.nameVi}); n++; } }); toast(`Đã thêm ${n} món`); break; }
     case "md-text-add": { let n=0; String(S.md.text||"").split(/\n/).map(l=>l.replace(/^[\s\-•*\d.)]+/,"").trim()).filter(Boolean).forEach(l=>{ if(addDraftItem(l)) n++; }); S.md.text=""; toast(`Đã thêm ${n} món`); break; }
-    case "md-add-one": S.md.items.push({id:null,nameVi:"",nameEn:"",soldOut:false}); break;
+    case "md-add-one": S.md.items.push({id:null,nameVi:""}); break;
     case "md-del": S.md.items.splice(i,1); break;
-    case "md-out": S.md.items[i].soldOut=!S.md.items[i].soldOut; break;
     case "md-clear": if(!(await ask("Xoá hết món trong thực đơn đang soạn?","Xoá hết",true))) return; S.md.items=[]; break;
     case "publish": publishGroup(); return;
     case "s-toggle": S.sf[v]=!S.sf[v]; break;
@@ -1161,7 +1157,6 @@ function onInput(e){
     case "md-host": S.md.hostName=t.value; saveDraftSoon(); return;
     case "md-shop": S.md.shopName=t.value; saveDraftSoon(); return;
     case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; saveDraftSoon(); return;
-    case "md-en": S.md.items[i].nameEn=t.value; saveDraftSoon(); return;
     case "md-price": S.md.items[i].price=t.value.trim()===""?null:Math.max(0,Math.round(Number(t.value)||0)); saveDraftSoon(); return;
     case "md-text": S.md.text=t.value; saveDraftSoon(); return;
     case "lib-q": S.libQ=t.value; break;
