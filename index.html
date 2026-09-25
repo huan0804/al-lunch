@@ -778,7 +778,7 @@ function cartView(){
       html += `<div class="band" style="margin:18px -20px"></div><h2 class="sec" style="margin-bottom:6px">Thanh toán</h2>`;
       if (c.guests.length) html += `<p class="small muted" style="margin:0 0 4px">Bạn thanh toán một lần cho cả ${c.guests.length+1} người: ${money(cartTotal(c))}.</p>`;
       html += `<div role="radiogroup" aria-label="Hình thức thanh toán">
-          <button class="opt" role="radio" aria-checked="${c.payMethod==="transfer"}" data-a="pay" data-v="transfer"><span class="t"><b>Chuyển khoản</b><small>Quét mã QR đã có sẵn số tiền</small></span><span class="radio"></span></button>
+          <button class="opt" role="radio" aria-checked="${c.payMethod==="transfer"}" data-a="pay" data-v="transfer"><span class="t"><b>Chuyển khoản</b><small>Quét mã QR, chuyển cho trưởng nhóm</small></span><span class="radio"></span></button>
           <button class="opt" role="radio" aria-checked="${c.payMethod==="cash"}" data-a="pay" data-v="cash"><span class="t"><b>Tiền mặt</b><small>Đưa trực tiếp cho trưởng nhóm</small></span><span class="radio"></span></button></div>`;
     }
     html += `<div class="between" style="margin-top:18px"><div><b style="font-size:18px">Tổng tạm tính</b><div class="small muted">${cartCount(c)} suất</div></div><b class="num" style="font-size:20px">${money(cartTotal(c))}</b></div></div>`;
@@ -839,7 +839,8 @@ function payBlock(o){
 function qrPanel(o){
   const c=S.session; if(!c?.accountNo) return `<p class="err">Trưởng nhóm chưa nhập tài khoản ngân hàng.</p>`;
   const info=transferInfo(curDate(), o.name), svg=qrSvg(vietqr(c.bankBin,c.accountNo,o.total,info));
-  return `<div class="qrbox">${svg?`<div class="qr" aria-label="Mã QR chuyển khoản">${svg}</div>`:""}<div class="kv">
+  return `<p class="small muted" style="margin:0 0 10px">Tài khoản dưới đây là của <b>${esc(hostName())}</b> (trưởng nhóm) — trưởng nhóm sẽ gộp tiền và trả cho quán, bạn không chuyển thẳng cho quán.</p>
+  <div class="qrbox">${svg?`<div class="qr" aria-label="Mã QR chuyển khoản">${svg}</div>`:""}<div class="kv">
     <div><span>Ngân hàng</span><b>${esc(c.bankName||c.bankBin)}</b></div>
     <div><span>Số tài khoản</span><b class="num">${esc(c.accountNo)}</b><button class="btn" data-a="copy" data-t="${esc(c.accountNo)}">Copy</button></div>
     <div><span>Chủ tài khoản</span><b>${esc(c.accountName||"")}</b></div>
