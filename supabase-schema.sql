@@ -105,6 +105,61 @@ create table if not exists orders (
 create index if not exists orders_session_idx on orders (session_key);
 
 -- ============================================================
+-- Giới hạn độ dài / chặn ký tự điều khiển (lớp phòng thủ thứ 2 sau
+-- maxlength ở client) — client chỉ chặn ở UI (input maxlength=...), ai
+-- gọi thẳng Supabase REST API/anon key bỏ qua được hoàn toàn. Vì RLS ghi
+-- đang mở cho tất cả (xem mục RLS bên dưới), mọi text do người dùng nhập
+-- (tên, tên quán, tên chủ TK, ghi chú) cần constraint ở DB làm chốt chặn
+-- cuối cùng, độc lập với client — không thay thế esc() khi render HTML,
+-- chỉ giới hạn ĐỘ DÀI và CONTROL CHARACTER (không lọc HTML/script, vì
+-- lọc đó vẫn phải làm đúng tại nơi render, xem index.html esc()).
+-- ============================================================
+-- "alter table add constraint" không có IF NOT EXISTS (khác create policy)
+-- nên phải tự drop-rồi-add từng cái để an toàn chạy lại nhiều lần.
+alter table sessions drop constraint if exists sessions_host_name_len;
+alter table sessions add constraint sessions_host_name_len check (char_length(host_name) <= 40);
+alter table sessions drop constraint if exists sessions_shop_name_len;
+alter table sessions add constraint sessions_shop_name_len check (char_length(shop_name) <= 60);
+alter table sessions drop constraint if exists sessions_account_name_len;
+alter table sessions add constraint sessions_account_name_len check (char_length(account_name) <= 100);
+alter table orders drop constraint if exists orders_name_len;
+alter table orders add constraint orders_name_len check (char_length(name) <= 40);
+-- guests: mảng tên đặt hộ — giới hạn số lượng người VÀ độ dài từng tên,
+-- tránh 1 request nhồi mảng khổng lồ hoặc tên siêu dài vào jsonb.
+alter table orders drop constraint if exists orders_guests_shape;
+alter table orders add constraint orders_guests_shape check (
+  jsonb_typeof(guests) = 'array'
+  and jsonb_array_length(guests) <= 20
+  and not exists (
+    select 1 from jsonb_array_elements_text(guests) g(name)
+    where char_length(g.name) > 40
+  )
+);
+-- sets: mỗi set có "note" (ghi chú cho quán, client giới hạn 120 ký tự) —
+-- chặn ở DB nếu note dài bất thường hoặc "for" (tên người được đặt hộ) dài
+-- bất thường; không parse sâu hơn vì "sets" còn nhiều field khác (dishes,
+-- qty, price) không cần giới hạn thêm ở đây.
+alter table orders drop constraint if exists orders_sets_shape;
+alter table orders add constraint orders_sets_shape check (
+  jsonb_typeof(sets) = 'array'
+  and not exists (
+    select 1 from jsonb_array_elements(sets) s
+    where char_length(coalesce(s->>'note','')) > 120
+       or char_length(coalesce(s->>'for','')) > 40
+  )
+);
+-- Ký tự điều khiển (VD ký tự xuống dòng ẩn, null byte) trong tên hiển thị
+-- có thể phá layout hoặc dùng để nhồi log/thông báo giả — chặn cho các
+-- trường hiển thị ngắn (không áp dụng cho "note" vì ghi chú hợp lệ có thể
+-- cần xuống dòng).
+alter table sessions drop constraint if exists sessions_host_name_no_ctrl;
+alter table sessions add constraint sessions_host_name_no_ctrl check (host_name !~ '[\u0000-\u0008\u000B\u000C\u000E-\u001F]');
+alter table sessions drop constraint if exists sessions_shop_name_no_ctrl;
+alter table sessions add constraint sessions_shop_name_no_ctrl check (shop_name !~ '[\u0000-\u0008\u000B\u000C\u000E-\u001F]');
+alter table orders drop constraint if exists orders_name_no_ctrl;
+alter table orders add constraint orders_name_no_ctrl check (name !~ '[\u0000-\u0008\u000B\u000C\u000E-\u001F]');
+
+-- ============================================================
 -- Row Level Security
 -- ============================================================
 -- Mô hình quyền (đã chọn theo yêu cầu người dùng — nhiều đơn nhóm có thể
