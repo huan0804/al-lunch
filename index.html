@@ -189,6 +189,9 @@ details.more summary::-webkit-details-marker{display:none}
 .toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
 .toast.on{opacity:1}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+.boot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:100vh;min-height:100dvh}
+.boot .spin{width:38px;height:38px;border-width:4px;border-color:var(--brand);border-right-color:transparent}
+.boot span{color:var(--muted);font-size:15px;font-weight:600}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}.toast,.toggle::after{transition:none}}
 .empty{text-align:center;padding:30px 10px}
@@ -197,7 +200,7 @@ table{width:100%;border-collapse:collapse}
 </style>
 </head>
 <body>
-<div id="app"><div class="page"><p class="pad muted" style="padding-top:30px">Đang tải…</p></div></div>
+<div id="app"><div class="page"><div class="boot"><span class="spin"></span><span>Đang tải…</span></div></div></div>
 <div id="overlay"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -578,7 +581,7 @@ function render(){
 }
 function view(){
   if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
-  if (!S.cfgLoaded||!S.sessLoaded||!S.ordersLoaded) return `<div class="page"><p class="pad muted" style="padding-top:30px"><span class="spin"></span> Đang tải…</p></div>`;
+  if (!S.cfgLoaded||!S.sessLoaded||!S.ordersLoaded) return `<div class="page"><div class="boot"><span class="spin"></span><span>Đang tải…</span></div></div>`;
   // Cài đặt chung (giá/tuỳ chọn) không gắn với quyền quản lý session nào —
   // ai cũng sửa được, giống việc ai cũng tạo được đơn mới.
   if (S.view==="bank") return bankView();
