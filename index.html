@@ -291,18 +291,29 @@ const S = {
 const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
 const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
 // picks: mảng id món (từ cart/item sheet) HOẶC số lượng món (dùng nội bộ
-// cho priceRule() khi chưa có món cụ thể). Giá riêng của 1 món (dish.price)
-// chỉ áp dụng khi suất CHỈ có đúng 1 món đó — suất nhiều món luôn dùng
-// công thức base chung, không cộng dồn giá riêng của từng món (xem feedback
-// người dùng: đơn giản hoá, tránh phải định nghĩa cách cộng giá nhiều món).
+// cho priceRule() khi chưa có món cụ thể, luôn coi là món thường).
+// Món có giá riêng LUÔN cộng đúng giá niêm yết của nó vào tổng suất, dù đi
+// kèm bao nhiêu món khác. Các món THƯỜNG còn lại trong suất tính theo đúng
+// công thức base cũ dựa trên SỐ LƯỢNG món thường đó — NHƯNG khi chỉ có
+// đúng 1 món thường đi kèm ít nhất 1 món giá riêng khác, không gấp đôi giá
+// (base/2, không phải base) vì quy tắc "1 món = gấp đôi" chỉ áp dụng khi cả
+// suất thật sự chỉ có 1 món duy nhất. VD base 35k: 45k (riêng) + 1 món
+// thường = 45.000+17.500=62.500đ; 45k (riêng) + 2 món thường = 45.000+35.000
+// =80.000đ; 45k (riêng) + 3 món thường = 45.000+53.000=98.000đ (coi 3 món
+// thường như 1 suất 3 món độc lập, dùng nguyên setPrice(3)).
 function setPrice(picks, base=unitPrice()){
-  const n = Array.isArray(picks) ? picks.length : picks;
-  if (n<=0) return 0;
-  if (Array.isArray(picks) && picks.length===1){
-    const custom = dishById(picks[0])?.price;
-    if (custom!=null) return Number(custom);
-  }
-  return Math.round(base*Math.max(n,2)/2/1000)*1000;
+  if (!Array.isArray(picks)){ const n=picks; return n<=0?0:Math.round(base*Math.max(n,2)/2/1000)*1000; }
+  if (picks.length<=0) return 0;
+  const customs=[], regularIds=[];
+  picks.forEach(id=>{ const p=dishById(id)?.price; if(p!=null) customs.push(Number(p)); else regularIds.push(id); });
+  if (!customs.length) return Math.round(base*Math.max(regularIds.length,2)/2/1000)*1000;
+  const customTotal = customs.reduce((a,b)=>a+b,0);
+  if (!regularIds.length) return customTotal;
+  // 1 món thường đi kèm: KHÔNG làm tròn đến nghìn — base/2 có thể lẻ 500đ
+  // (VD base 35k → 17.500đ) và người dùng muốn giữ đúng số lẻ đó thay vì
+  // làm tròn lên, khác với mọi chỗ khác trong app vốn luôn tròn nghìn.
+  const regularTotal = regularIds.length===1 ? base/2 : Math.round(base*regularIds.length/2/1000)*1000;
+  return customTotal + regularTotal;
 }
 const priceRule = (b=unitPrice()) => `1 món ${money(b)}, 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
 const curDate = () => S.session?.date;
@@ -669,8 +680,7 @@ function itemSheet(sh){
   const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
   const opts=m.map(d=>{ const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
     return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
-  const custom1 = n===1 ? dishById(cur.picks[0])?.price : null;
-  const label = n===0 ? "Chọn ít nhất 1 món" : n===1 ? `1 món: ${money(custom1!=null?custom1:base)}` : n===2 ? `2 món: ${money(base)}` : `${n} món: ${money(base/2)} × ${n} = ${money(setPrice(n,base))}`;
+  const label = n===0 ? "Chọn ít nhất 1 món" : `${n} món: ${money(setPrice(cur.picks,base))}`;
   const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
   const total = filled.reduce((a,[,x])=>a+setPrice(x.picks,base)*x.qty,0);
   const count = filled.reduce((a,[,x])=>a+x.qty,0);
