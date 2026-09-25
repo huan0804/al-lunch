@@ -168,6 +168,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand)}
 .mrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .mrow:last-child{border-bottom:0}
 .mrow .en{grid-column:1/2}
+.mrow .price{grid-column:2/4;width:110px;justify-self:end}
 details.more summary{cursor:pointer;font-weight:600;padding:10px 0;list-style:none;display:flex;justify-content:space-between}
 details.more summary::-webkit-details-marker{display:none}
 
@@ -231,6 +232,7 @@ function norm(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]
 function ascii(s){ return norm(s).toUpperCase().replace(/[^A-Z0-9 ]/g,"").replace(/\s+/g," ").trim(); }
 function lsGet(k){ try{ return localStorage.getItem(k); }catch{ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch{} }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch{} }
 const tlv = (id,v) => id + String(v.length).padStart(2,"0") + v;
 function crc16(str){ let c=0xFFFF; for(let i=0;i<str.length;i++){ c^=str.charCodeAt(i)<<8; for(let j=0;j<8;j++){ c=(c&0x8000)?((c<<1)^0x1021):(c<<1); c&=0xFFFF; } } return c.toString(16).toUpperCase().padStart(4,"0"); }
 function vietqr(bin, acc, amount, info){
@@ -284,12 +286,25 @@ const HERO = `<svg viewBox="0 0 260 200" aria-hidden="true">
 const S = {
   db:null, sample:null, uid:null, canEdit:false, isOwner:false, imagesOK:false,
   config:null, cfgLoaded:false, session:null, sessLoaded:false, orders:{}, ordersLoaded:false, dishes:[], recent:[],
-  view:"home", sheet:null, cart:null, md:null, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
+  view:"home", sheet:null, cart:null, md:null, mdRestored:false, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
 };
 const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
-const setPrice = (n, base=unitPrice()) => n<=0 ? 0 : Math.round(base*Math.max(n,2)/2/1000)*1000;
-const priceRule = (b=unitPrice()) => `1 món được gấp đôi (${money(b)}), 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
 const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
+// picks: mảng id món (từ cart/item sheet) HOẶC số lượng món (dùng nội bộ
+// cho priceRule() khi chưa có món cụ thể). Giá riêng của 1 món (dish.price)
+// chỉ áp dụng khi suất CHỈ có đúng 1 món đó — suất nhiều món luôn dùng
+// công thức base chung, không cộng dồn giá riêng của từng món (xem feedback
+// người dùng: đơn giản hoá, tránh phải định nghĩa cách cộng giá nhiều món).
+function setPrice(picks, base=unitPrice()){
+  const n = Array.isArray(picks) ? picks.length : picks;
+  if (n<=0) return 0;
+  if (Array.isArray(picks) && picks.length===1){
+    const custom = dishById(picks[0])?.price;
+    if (custom!=null) return Number(custom);
+  }
+  return Math.round(base*Math.max(n,2)/2/1000)*1000;
+}
+const priceRule = (b=unitPrice()) => `1 món ${money(b)}, 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
 const curDate = () => S.session?.date;
 const curKey = () => S.sessKey;
 // Link gửi cho team: link gốc (ARTIFACT_URL, không query) + ?order=<order_token>
@@ -298,7 +313,7 @@ const shareLink = () => {
   const base = (S.config?.shareUrl || ARTIFACT_URL).split("?")[0].split("#")[0];
   return S.session?.orderToken ? `${base}?order=${S.session.orderToken}` : base;
 };
-function setLabel(s){ const ds=s.dishes||[]; return ds.length===1 ? `${ds[0].name} (x2 gấp đôi)` : ds.map(d=>d.name).join(" + "); }
+function setLabel(s){ const ds=s.dishes||[]; return ds.map(d=>d.name).join(" + "); }
 function deadlineAt(s){ if(!s) return 0; if (s.deadlineAt) return s.deadlineAt; if (s.deadline){ const [h,m]=s.deadline.split(":").map(Number); const d=new Date(s.date+"T00:00:00"); d.setHours(h,m,0,0); return d.getTime(); } return 0; }
 function isLocked(){
   const s=S.session; if(!s) return true;
@@ -364,7 +379,7 @@ function ensureCart(){
   if (!(lsGet("comtrua:name")||"").trim()){ S.sheet={kind:"askname"}; return false; }
   S.cart = newCart(S.uid, mine()); return true;
 }
-const cartTotal = c => c.items.reduce((a,it)=>a+setPrice(it.picks.length)*it.qty,0);
+const cartTotal = c => c.items.reduce((a,it)=>a+setPrice(it.picks)*it.qty,0);
 const cartCount = c => c.items.reduce((a,it)=>a+it.qty,0);
 function validate(c){
   if (!c.items.length) return "Giỏ hàng chưa có món";
@@ -390,7 +405,7 @@ async function submitCart(){
     if (!(await ask("Xác nhận đặt món sẽ khoá đơn nhóm lại — không ai đặt hay sửa thêm được nữa. Bạn chắc đã đủ người đặt chưa?", "Xác nhận và khoá đơn"))) return;
   }
   const base=unitPrice();
-  const sets=c.items.map(it=>({ dishes: it.picks.map(id=>({ id, name: dishById(id)?.nameVi || it.names[id] || "?", portions: it.picks.length===1?2:1 })), note: it.note.trim(), qty: it.qty, price: setPrice(it.picks.length, base), for: c.guests.find(g=>g.id===it.for)?.name || null }));
+  const sets=c.items.map(it=>({ dishes: it.picks.map(id=>({ id, name: dishById(id)?.nameVi || it.names[id] || "?", portions: it.picks.length===1?2:1 })), note: it.note.trim(), qty: it.qty, price: setPrice(it.picks, base), for: c.guests.find(g=>g.id===it.for)?.name || null }));
   const total=sets.reduce((a,s)=>a+s.price*s.qty,0);
   const method=hostPaysFor(c.docId)?"host":c.payMethod; const prev=c.existing;
   let payStatus = method==="host"?"confirmed":"unpaid", reset=false;
@@ -485,7 +500,7 @@ async function publishGroup(){
       if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), (it.nameEn||"").trim()); continue; }
       if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), (it.nameEn||"").trim());
     }
-    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut}));
+    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),nameEn:(x.nameEn||"").trim(),soldOut:!!x.soldOut,price:x.price!=null?Number(x.price):null}));
     const bank={ bankBin:md.bankBin, bankName:md.bankName, accountNo:md.accountNo.trim(), accountName:ascii(md.accountName) };
     const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim(), ...bank };
     if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
@@ -512,10 +527,43 @@ async function publishGroup(){
 
 /* ================= Render ================= */
 const app=document.getElementById("app"), overlay=document.getElementById("overlay");
+// Khôi phục sau khi refresh: mỗi lượt tải trang gắn CỐ ĐỊNH với 1 URL
+// (?manage=/?order=/link gốc — xem boot()), nên dùng thẳng location.search
+// làm khoá localStorage là đủ cô lập giữa các session/host/guest khác nhau,
+// không cần biết trước S.sessKey lúc lưu. Chỉ lưu S.cart/S.md (giỏ hàng và
+// thực đơn đang soạn dở) — không lưu S.sheet (bottom-sheet đang mở), vì
+// sheet tham chiếu tới các state khác chưa chắc đã sẵn sàng ngay sau khi
+// tải trang xong; mất sheet đang mở chỉ là bấm lại 1 cái, chấp nhận được.
+const DRAFT_KEY = "comtrua:draft:" + (location.search || "root");
+function saveDraft(){
+  if (!S.cart && !S.md){ lsDel(DRAFT_KEY); return; }
+  // Lưu kèm S.view khi đang ở màn "create" — nếu không, sau khi khôi phục
+  // S.md, trang vẫn mở ra ở home, và lần bấm "Sửa thực đơn"/"Đặt đơn nhóm
+  // mới" tiếp theo sẽ xoá luôn S.md vừa khôi phục (case "create" luôn
+  // S.md=null trước khi ensureMd()) — mất draft ngay khi vừa lấy lại được.
+  try{ lsSet(DRAFT_KEY, JSON.stringify({cart:S.cart, md:S.md, view:S.md&&S.view==="create"?"create":undefined})); }catch{}
+}
+function loadDraft(){
+  try{
+    const raw=lsGet(DRAFT_KEY); if(!raw) return;
+    const d=JSON.parse(raw);
+    if (d.cart) S.cart=d.cart;
+    if (d.md){ S.md=d.md; S.mdRestored=true; if(d.view==="create") S.view="create"; }
+  }catch{}
+}
+// onInput() (gõ chữ) CỐ Ý không gọi render() cho phần lớn field, để tránh
+// vẽ lại toàn bộ #app mỗi lần gõ 1 ký tự — nhưng vì saveDraft() chỉ được
+// gọi trong render(), gõ xong rồi refresh ngay (chưa có hành động nào khác
+// kích hoạt render()) sẽ mất trắng, chưa từng được lưu 1 lần nào. Debounce
+// riêng 1 lần lưu localStorage cho input, tách khỏi render(), để gõ xong
+// vẫn được lưu dù không có re-render nào xảy ra.
+let draftSaveTimer=null;
+function saveDraftSoon(){ clearTimeout(draftSaveTimer); draftSaveTimer=setTimeout(saveDraft, 400); }
 function render(){
   const ae=document.activeElement, fid=ae?.id; let s1=null,s2=null; try{ s1=ae.selectionStart; s2=ae.selectionEnd; }catch{}
   app.innerHTML=view(); overlay.innerHTML=sheetView();
   if (fid){ const el=document.getElementById(fid); if(el){ el.focus({preventScroll:true}); try{ if(s1!=null) el.setSelectionRange(s1,s2); }catch{} } }
+  saveDraft();
 }
 function view(){
   if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
@@ -621,9 +669,10 @@ function itemSheet(sh){
   const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
   const opts=m.map(d=>{ const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
     return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.nameEn?`<small>${esc(d.nameEn)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
-  const label = n===0 ? "Chọn ít nhất 1 món" : n===1 ? `1 món: phần món được gấp đôi, ${money(base)}` : n===2 ? `2 món: ${money(base)}` : `${n} món: ${money(base/2)} × ${n} = ${money(setPrice(n,base))}`;
+  const custom1 = n===1 ? dishById(cur.picks[0])?.price : null;
+  const label = n===0 ? "Chọn ít nhất 1 món" : n===1 ? `1 món: ${money(custom1!=null?custom1:base)}` : n===2 ? `2 món: ${money(base)}` : `${n} món: ${money(base/2)} × ${n} = ${money(setPrice(n,base))}`;
   const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
-  const total = filled.reduce((a,[,x])=>a+setPrice(x.picks.length,base)*x.qty,0);
+  const total = filled.reduce((a,[,x])=>a+setPrice(x.picks,base)*x.qty,0);
   const count = filled.reduce((a,[,x])=>a+x.qty,0);
   const who = people.find(p=>p.id===sh.active)?.name || "";
   const tabs = multi ? `<div class="ptabs" role="tablist" aria-label="Chọn món cho từng người">${people.map(p=>{ const x=sh.per[p.id]; const k=x.picks.length;
@@ -706,8 +755,8 @@ function cartView(){
     const hp=hostPaysFor(c.docId);
     html += `<div class="card"><div class="mem-head"><span class="avatar">${esc((c.name||"?").trim()[0]||"?")}</span><div class="nm"><input type="text" id="c-name" data-f="c-name" value="${esc(c.name)}" placeholder="${isOther?"Tên người được đặt hộ":"Nhập tên của bạn"}" maxlength="40" aria-label="Tên"></div>${hp?`<span class="badge b-gry">Trưởng nhóm</span>`:""}</div>
       ${c.guests.length ? `<div class="between small" style="margin-bottom:6px"><span>Đặt hộ ${c.guests.length} người: <b>${esc(c.guests.map(g=>g.name).join(", "))}</b></span><button class="link" data-a="proxy-open">Sửa</button></div>` : `<button class="link" data-a="proxy-open" style="margin-bottom:6px">+ Đặt hộ người khác</button>`}
-      ${c.items.length ? cartGroups(c).map(g=>(c.guests.length?`<div class="who"><span>${esc(g.name)}</span><span class="num">${money(g.items.reduce((a,x)=>a+setPrice(x.it.picks.length)*x.it.qty,0))}</span></div>`:"")+(g.items.length?g.items.map(({it,i})=>{ const lbl = it.picks.length===1 ? `${(dishById(it.picks[0])?.nameVi||it.names[it.picks[0]]||"?")} (x2 gấp đôi)` : it.picks.map(id=>dishById(id)?.nameVi||it.names[id]||"?").join(" + ");
-          return lineHtml(lbl, it.note, it.qty, setPrice(it.picks.length)*it.qty, `<div class="acts"><button data-a="edit-item" data-i="${i}">Sửa</button><button data-a="del-item" data-i="${i}">Xoá</button></div>`); }).join(""):`<p class="small err" style="margin:6px 0">Chưa chọn món. Bấm Thêm món, rồi chọn tab “${esc(g.name)}”.</p>`)).join("")
+      ${c.items.length ? cartGroups(c).map(g=>(c.guests.length?`<div class="who"><span>${esc(g.name)}</span><span class="num">${money(g.items.reduce((a,x)=>a+setPrice(x.it.picks)*x.it.qty,0))}</span></div>`:"")+(g.items.length?g.items.map(({it,i})=>{ const lbl = it.picks.map(id=>dishById(id)?.nameVi||it.names[id]||"?").join(" + ");
+          return lineHtml(lbl, it.note, it.qty, setPrice(it.picks)*it.qty, `<div class="acts"><button data-a="edit-item" data-i="${i}">Sửa</button><button data-a="del-item" data-i="${i}">Xoá</button></div>`); }).join(""):`<p class="small err" style="margin:6px 0">Chưa chọn món. Bấm Thêm món, rồi chọn tab “${esc(g.name)}”.</p>`)).join("")
         : `<p class="muted" style="margin:6px 0">Chưa thêm món nào.</p>`}
       ${c.existing?`<button class="link red" data-a="cancel-cart" style="margin-top:8px">Huỷ thay đổi</button>`:""}
     </div>`;
@@ -837,7 +886,7 @@ function hostSummary(){
         <div class="stat g"><small>Đã nhận</small><b class="num">${money(sum(rec))}</b></div><div class="stat o"><small>Tiền mặt cần thu (${cash.length})</small><b class="num">${money(sum(cash))}</b></div>
         <div class="stat r" style="background:var(--surface);grid-column:1/-1"><small>Chuyển khoản chưa xác nhận (${tf.length})</small><b class="num">${money(sum(tf))}</b></div></div>
       <details class="more" data-k="kitchen" ${S.open.kitchen?"open":""} style="margin-top:8px"><summary><span>Tổng món gửi quán</span>${I.chev}</summary>
-        ${rows.length?`<ul style="margin:0 0 10px;padding-left:18px">${rows.map(([n,c])=>`<li><b class="num">${c}</b> phần ${esc(n)}${doubles[n]?` <span class="small muted">(có ${doubles[n]} suất gấp đôi)</span>`:""}</li>`).join("")}</ul>`:`<p class="muted">Chưa có ai đặt.</p>`}</details>
+        ${rows.length?`<ul style="margin:0 0 10px;padding-left:18px">${rows.map(([n,c])=>`<li><b class="num">${c}</b> phần ${esc(n)}${doubles[n]?` <span class="small muted">(${doubles[n]} suất chỉ chọn món này, mỗi suất tính 2 phần)</span>`:""}</li>`).join("")}</ul>`:`<p class="muted">Chưa có ai đặt.</p>`}</details>
       <div class="row" style="margin-top:6px">
         <button class="btn" data-a="copy" data-t="${esc(kitchen)}" ${list.length?"":"disabled"}>Copy tổng đơn gửi quán</button>
         <button class="btn" data-a="copy" data-t="${esc(unpaidText)}" ${unpaid.length?"":"disabled"}>Copy DS chưa trả</button>
@@ -909,7 +958,9 @@ function createView(){
       <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
       ${md.items.map((x,i)=>`<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
         <button class="btn ${x.soldOut?"danger":""}" data-a="md-out" data-i="${i}">${x.soldOut?"Hết món":"Còn"}</button><button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button>
-        <input type="text" class="en" id="mde-${i}" data-f="md-en" data-i="${i}" value="${esc(x.nameEn||"")}" placeholder="Tên tiếng Anh (tuỳ chọn)" aria-label="Tên tiếng Anh món ${i+1}"></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+        <input type="text" class="en" id="mde-${i}" data-f="md-en" data-i="${i}" value="${esc(x.nameEn||"")}" placeholder="Tên tiếng Anh (tuỳ chọn)" aria-label="Tên tiếng Anh món ${i+1}">
+        <input type="number" class="price" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)"></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+      ${md.items.length?`<p class="small muted" style="margin-top:8px">Để trống ô giá = tính theo giá suất thường. Nhập giá riêng nếu món này giá khác — chỉ áp dụng khi suất chỉ chọn 1 mình món đó.</p>`:""}
     </div>
     <div class="bottom"><div class="in"><button class="cta" data-a="publish" ${S.busy||!md.items.length?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${live?"Cập nhật đơn hàng nhóm":"Tạo đơn hàng nhóm"}</button></div></div>
   </div>`;
@@ -922,7 +973,7 @@ function bankView(){
   const f=S.sf;
   return `<div class="page">${topbar("Cài đặt chung", "Áp dụng cho mọi đơn nhóm", "back", "", S.bankReturn||"home")}<div class="pad">
     <label class="f" for="s-price">Giá 1 suất 2 món</label><input type="number" id="s-price" data-f="s-price" min="1000" step="500" value="${esc(f.pricePerSet)}" style="max-width:200px">
-    <p class="small muted">1 món (gấp đôi) và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới.</p>
+    <p class="small muted">1 món và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới. Món có giá riêng (đặt ở màn Thực đơn) dùng giá riêng đó khi chỉ chọn 1 mình món đó.</p>
     <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của người tạo đơn ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
     <div class="setting"><div class="t"><b>Cho cả team xem ai đã thanh toán</b><small>Chỉ hiện tên và trạng thái, không hiện món và số tiền</small></div><button class="toggle" role="switch" aria-checked="${f.showPaymentToTeam}" data-a="s-toggle" data-v="showPaymentToTeam"></button></div>
     <label class="f" for="s-url" style="margin-top:8px">Domain của app (chỉ sửa khi đổi tên miền)</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
@@ -944,7 +995,12 @@ async function onClick(e){
   switch(a){
     case "go": go(v); break;
     case "create": {
-      S.md=null; ensureMd(v==="edit"?"edit":"new"); S.view="create";
+      // Nếu vừa khôi phục draft từ localStorage (refresh giữa chừng lúc
+      // đang sửa thực đơn) và đúng mode đang mở lại, GIỮ draft đó thay vì
+      // xoá — chỉ dùng cờ 1 lần rồi bỏ, các lần bấm sau vẫn reset như cũ.
+      if (S.md && S.mdRestored && S.md.mode===(v==="edit"?"edit":"new")){ S.mdRestored=false; }
+      else { S.md=null; ensureMd(v==="edit"?"edit":"new"); }
+      S.view="create";
       window.scrollTo({top:0}); break; }
     case "new-group": {
       // Tạo đơn nhóm KHÁC (session mới, key khác) — không sửa đơn đang mở.
@@ -1089,19 +1145,21 @@ function onInput(e){
     case "px": S.sheet.names[i]=t.value; return;
     case "askname": S.sheet.name=t.value; return;
     case "bank-q": S.sheet.q=t.value; break;
-    case "md-host": S.md.hostName=t.value; return;
-    case "md-shop": S.md.shopName=t.value; return;
-    case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; return;
-    case "md-en": S.md.items[i].nameEn=t.value; return;
-    case "md-text": S.md.text=t.value; return;
+    case "md-host": S.md.hostName=t.value; saveDraftSoon(); return;
+    case "md-shop": S.md.shopName=t.value; saveDraftSoon(); return;
+    case "md-name": S.md.items[i].nameVi=t.value; S.md.items[i].id=null; saveDraftSoon(); return;
+    case "md-en": S.md.items[i].nameEn=t.value; saveDraftSoon(); return;
+    case "md-price": S.md.items[i].price=t.value.trim()===""?null:Math.max(0,Math.round(Number(t.value)||0)); saveDraftSoon(); return;
+    case "md-text": S.md.text=t.value; saveDraftSoon(); return;
     case "lib-q": S.libQ=t.value; break;
-    case "md-acc": S.md.accountNo=t.value; break;
-    case "md-accname": S.md.accountName=t.value; return;
-    case "md-bin": S.md.bankBin=t.value.trim(); break;
+    case "md-acc": S.md.accountNo=t.value; saveDraftSoon(); break;
+    case "md-accname": S.md.accountName=t.value; saveDraftSoon(); return;
+    case "md-bin": S.md.bankBin=t.value.trim(); saveDraftSoon(); break;
     case "s-price": S.sf.pricePerSet=t.value; return;
     case "s-url": S.sf.shareUrl=t.value; return;
     default: return;
   }
+  if (f==="c-name") saveDraftSoon();
   render();
 }
 app.addEventListener("input", onInput); overlay.addEventListener("input", onInput);
@@ -1135,6 +1193,7 @@ function watchSession(){
 }
 (async function boot(){
   if (!window.SupabaseAdapter){ render(); return; }
+  loadDraft();
   const {db,user,sample}=window.SupabaseAdapter;
   S.db=db; S.sample=sample; S.imagesOK=false; // đọc ảnh AI chưa khả dụng trong bản Supabase, xem PROJECT_HANDOFF.md
   // PHẢI resolve quyền quản lý (khớp ?manage= với đúng 1 session) TRƯỚC
