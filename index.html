@@ -61,6 +61,7 @@ svg.i{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-widt
 
 /* menu list */
 h2.sec{font-size:21px;font-weight:800;margin:0 0 4px}
+h3.sec-sub{font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
 .dish{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
 .dish:last-child{border-bottom:0}
 .dish .nm{flex:1;min-width:0}
@@ -687,10 +688,20 @@ function homeView(){
   if (canProxy) pills += `<button class="pill" data-a="proxy-open">${I.group} Đặt hộ${S.cart?.guests?.length?` (${S.cart.guests.length})`:""}</button>`;
   const proxyBanner = S.cart && S.cart.docId!==S.uid ? `<div class="banner" style="margin-top:14px"><span>Đang ${S.cart.existing?`sửa đơn của <b>${esc(S.cart.existing.name)}</b>`:"<b>đặt hộ</b> người khác"}</span><button class="btn" data-a="cancel-cart">Huỷ</button></div>` : "";
   const m=s.menu||[];
+  // Chia 2 nhóm hiển thị theo đúng menu tuần của quán: món "giá riêng"
+  // (price != null, VD 45k/món) là nhóm Special; còn lại là nhóm Lunch
+  // combo, tính theo công thức base (2 món = giá base). Đây là group hiển
+  // thị THEO price có sẵn — không thêm field category mới vào schema.
+  const dishRow = d => `<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b></div>
+        ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`;
+  const lunchDishes = m.filter(d=>d.price==null), specialDishes = m.filter(d=>d.price!=null);
   const menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
+      ${lunchDishes.length?`<h3 class="sec-sub">Combo ${money(unitPrice())} (2 món)</h3>
       <p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>
-      ${m.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b></div>
-        ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}
+      ${lunchDishes.map(dishRow).join("")}`:""}
+      ${specialDishes.length?`<h3 class="sec-sub" style="margin-top:${lunchDishes.length?"18px":"0"}">Món riêng</h3>
+      ${specialDishes.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b><small class="muted"> — ${money(d.price)}</small></div>
+        ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}`:""}
     </div>`;
   let bar="";
   if (S.cart && S.cart.items.length) bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Giỏ hàng · ${cartCount(S.cart)} suất</span><span class="num">${money(cartTotal(S.cart))}</span></button></div></div>`;
