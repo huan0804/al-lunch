@@ -335,10 +335,25 @@ function setPrice(picks, base=unitPrice()){
   return customTotal + comboSetPrice(regularIds.length, base, customs.length>0);
 }
 const priceRule = (b=unitPrice()) => `1 món ${money(comboSetPrice(1,b))}, 2 món ${money(b)}, từ 3 món trở lên mỗi món thêm ${money(COMBO_EXTRA_STEP)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
+// Nhãn hiển thị + thứ tự cố định của 4 khu trên "Thực đơn hôm nay". Dùng
+// chung cho homeView()/createView()/itemSheet() để cả 3 nơi luôn nhóm và
+// sắp xếp giống hệt nhau. Là HÀM (không phải const) vì nhãn "lunch" cần giá
+// unitPrice() hiện tại (theo session), không được chốt cứng lúc script load.
+const categoryLabel = c => ({ breakfast:"Bữa sáng", lunch:`Combo ${money(unitPrice())} (2 món)`, special:"Món riêng", snack:"Ăn vặt" })[c] || c;
+const CATEGORY_ORDER = ["breakfast","lunch","special","snack"];
+// Món cũ (tạo trước khi có field category) không có category -> suy ra từ
+// price để vẫn nhóm đúng theo cách 2-khu cũ (Combo/Món riêng), giữ backward
+// compat với mọi session/dish đã có trong DB từ trước.
+function dishCategory(d){ return d.category || (d.price==null ? "lunch" : "special"); }
+// Gom 1 mảng món thành object {breakfast:[...], lunch:[...], ...} theo đúng
+// CATEGORY_ORDER, bỏ qua khu rỗng — dùng chung cho mọi nơi hiển thị nhóm.
+function groupByCategory(items){
+  const g={}; items.forEach(d=>{ const c=dishCategory(d); (g[c]=g[c]||[]).push(d); });
+  return CATEGORY_ORDER.filter(c=>g[c]?.length).map(c=>[c,g[c]]);
+}
 // Menu tuần cố định của quán (ảnh WEEK MENU host gửi) — chỉ tên tiếng Việt.
 // Dùng để TỰ tạo thực đơn theo đúng thứ trong tuần (giờ Việt Nam), không bắt
-// host chọn món tay mỗi lần. Chỉ lấy Lunch + Special theo đúng yêu cầu —
-// bỏ qua Breakfast, Snack và 2 món "phục vụ cả ngày".
+// host chọn món tay mỗi lần. Lấy đủ Breakfast + Lunch + Special + Snack.
 // - lunch: 5 món/ngày, combo 2 món luôn 35k => KHÔNG gắn giá riêng (price:
 //   null), để setPrice() tự tính theo công thức base (2 món = giá base).
 // - special: 1 món 45k/món => gắn giá riêng cố định 45000, vì đây là giá
@@ -381,16 +396,24 @@ const WEEK_MENU = {
 // trong ảnh WEEK MENU nhưng KHÔNG có giá niêm yết -> không đưa vào
 // WEEK_MENU.snack (sẽ không có giá đúng để gắn); host tự thêm bằng "+ Thêm
 // 1 món" nếu muốn bán món này, tự nhập giá theo báo giá thực tế của quán.
-// breakfast/snack hiện chỉ là DỮ LIỆU THAM KHẢO, chưa được weekMenuItemsForToday()
-// đưa vào thực đơn tự động (xem comment ngay dưới) — chỉ lunch+special được
-// tự động điền như trước, giữ đúng hành vi cũ để không đổi UX ngoài ý muốn.
+// `category` chỉ dùng để CHIA NHÓM HIỂN THỊ (4 khu Sáng/Trưa/Đặc biệt/Ăn vặt
+// trên "Thực đơn hôm nay" — xem menuGroups() dùng chung ở homeView()/
+// createView()/itemSheet()), KHÔNG ảnh hưởng cách tính tiền — giá vẫn hoàn
+// toàn dựa trên field `price` như trước: price:null = món combo (theo công
+// thức comboSetPrice), price:N = giá cố định cộng thẳng (breakfast/special/
+// snack đều price cố định, giống hệt cách Special hoạt động từ trước).
+// Món cũ trong DB từ trước khi có category không có field này —
+// dishCategory() (dưới) mặc định coi item thiếu category là "lunch" nếu
+// price==null, "special" nếu có price, giữ đúng cách nhóm 2-khu cũ.
 // Xây S.md.items từ WEEK_MENU cho đúng thứ hôm nay (giờ VN). Trả về [] nếu
 // hôm nay là Thứ 7/Chủ nhật hoặc không có menu — ensureMd() sẽ để trống.
 function weekMenuItemsForToday(){
   const day = WEEK_MENU[todayWeekday()]; if (!day) return [];
   const items = [];
-  for (const nameVi of day.lunch) items.push({ id:null, nameVi, price:null });
-  for (const nameVi of day.special) items.push({ id:null, nameVi, price:45000 });
+  for (const [nameVi,price] of day.breakfast||[]) items.push({ id:null, nameVi, price, category:"breakfast" });
+  for (const nameVi of day.lunch) items.push({ id:null, nameVi, price:null, category:"lunch" });
+  for (const nameVi of day.special) items.push({ id:null, nameVi, price:45000, category:"special" });
+  for (const [nameVi,price] of day.snack||[]) items.push({ id:null, nameVi, price, category:"snack" });
   return items;
 }
 const curDate = () => S.session?.date;
@@ -626,7 +649,7 @@ async function publishGroup(){
       if (!it.id){ const m=libMatch(it.nameVi); it.id = m ? m.id : await window.upsertDish(null, it.nameVi.trim(), ""); continue; }
       if (isNew) await window.upsertDish(it.id, it.nameVi.trim(), "");
     }
-    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),price:x.price!=null?Number(x.price):null}));
+    const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),price:x.price!=null?Number(x.price):null,category:x.category||null}));
     const bank={ bankBin:md.bankBin, bankName:md.bankName, accountNo:md.accountNo.trim(), accountName:ascii(md.accountName) };
     const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim(), ...bank };
     if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
@@ -737,20 +760,15 @@ function homeView(){
   if (canProxy) pills += `<button class="pill" data-a="proxy-open">${I.group} Đặt hộ${S.cart?.guests?.length?` (${S.cart.guests.length})`:""}</button>`;
   const proxyBanner = S.cart && S.cart.docId!==S.uid ? `<div class="banner" style="margin-top:14px"><span>Đang ${S.cart.existing?`sửa đơn của <b>${esc(S.cart.existing.name)}</b>`:"<b>đặt hộ</b> người khác"}</span><button class="btn" data-a="cancel-cart">Huỷ</button></div>` : "";
   const m=s.menu||[];
-  // Chia 2 nhóm hiển thị theo đúng menu tuần của quán: món "giá riêng"
-  // (price != null, VD 45k/món) là nhóm Special; còn lại là nhóm Lunch
-  // combo, tính theo công thức base (2 món = giá base). Đây là group hiển
-  // thị THEO price có sẵn — không thêm field category mới vào schema.
-  const dishRow = d => `<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b></div>
+  // 4 khu (Bữa sáng/Combo/Món riêng/Ăn vặt) theo category, xem groupByCategory()
+  // — công thức tính tiền không đổi, vẫn dựa thẳng vào price (xem setPrice()).
+  const dishRow = d => `<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b>${d.price!=null?`<small class="muted"> — ${money(d.price)}</small>`:""}</div>
         ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`;
-  const lunchDishes = m.filter(d=>d.price==null), specialDishes = m.filter(d=>d.price!=null);
+  const groups = groupByCategory(m);
   const menu = `<div class="band"></div><div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
-      ${lunchDishes.length?`<h3 class="sec-sub">Combo ${money(unitPrice())} (2 món)</h3>
-      <p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>
-      ${lunchDishes.map(dishRow).join("")}`:""}
-      ${specialDishes.length?`<h3 class="sec-sub" style="margin-top:${lunchDishes.length?"18px":"0"}">Món riêng</h3>
-      ${specialDishes.map(d=>`<div class="dish ${d.soldOut?"out":""}"><div class="nm"><b>${esc(d.nameVi)}</b><small class="muted"> — ${money(d.price)}</small></div>
-        ${d.soldOut?`<span class="soldtag">Hết món</span>`:(locked&&!host?"":`<button class="plus" data-a="add" data-v="${esc(d.id)}" aria-label="Thêm ${esc(d.nameVi)}">${I.plus}</button>`)}</div>`).join("")}`:""}
+      ${groups.map(([cat,dishes],idx)=>`<h3 class="sec-sub" style="margin-top:${idx?"18px":"0"}">${categoryLabel(cat)}</h3>
+      ${cat==="lunch"?`<p class="small muted" style="margin:0 0 6px">Cách tính: ${priceRule()}.</p>`:""}
+      ${dishes.map(dishRow).join("")}`).join("")}
     </div>`;
   let bar="";
   if (S.cart && S.cart.items.length) bar = `<div class="bottom"><div class="in"><button class="cta split" data-a="go" data-v="cart"><span>Giỏ hàng · ${cartCount(S.cart)} suất</span><span class="num">${money(cartTotal(S.cart))}</span></button></div></div>`;
@@ -809,15 +827,12 @@ function itemSheet(sh){
   const m=S.session?.menu||[], base=unitPrice();
   const multi = sh.index==null && (S.cart?.guests?.length||0)>0;
   const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
-  // Chia 2 nhóm như màn "Thực đơn hôm nay": Combo (price==null, 2 món =
-  // giá base) và Món riêng (price!=null, giá cố định từng món) — cùng cách
-  // group đã dùng ở homeView()/createView(), chỉ khác là ở đây mỗi nút là
-  // checkbox chọn/bỏ theo id món, không có input sửa nên không cần giữ index.
+  // 4 khu như màn "Thực đơn hôm nay" (xem groupByCategory()) — chỉ khác là
+  // ở đây mỗi nút là checkbox chọn/bỏ theo id món, không có input sửa nên
+  // không cần giữ index.
   const optRow = d => { const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
     return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.price!=null?`<small>${money(d.price)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; };
-  const lunchM=m.filter(d=>d.price==null), specialM=m.filter(d=>d.price!=null);
-  const opts = (lunchM.length?`<h3 class="sec-sub">Combo ${money(base)} (2 món)</h3>${lunchM.map(optRow).join("")}`:"")
-    + (specialM.length?`<h3 class="sec-sub" style="margin-top:${lunchM.length?"14px":"0"}">Món riêng</h3>${specialM.map(optRow).join("")}`:"");
+  const opts = groupByCategory(m).map(([cat,dishes],idx)=>`<h3 class="sec-sub" style="margin-top:${idx?"14px":"0"}">${categoryLabel(cat)}</h3>${dishes.map(optRow).join("")}`).join("");
   const label = n===0 ? "Chọn ít nhất 1 món" : `${n} món: ${money(setPrice(cur.picks,base))}`;
   const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
   const total = filled.reduce((a,[,x])=>a+setPrice(x.picks,base)*x.qty,0);
@@ -1116,20 +1131,18 @@ function createView(){
       </details>`}
       <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
       ${(()=>{
-        // Chia hiển thị theo đúng cách màn "Thực đơn hôm nay" (home view)
-        // đang làm: có giá riêng (price != null) = Món riêng, còn lại = Combo
-        // Lunch. data-i PHẢI là chỉ số THẬT trong md.items (không phải chỉ
-        // số trong nhóm) vì các handler md-name/md-price/md-del dùng đúng
-        // chỉ số đó để sửa/xoá S.md.items[i] — lọc theo nhóm nhưng giữ
-        // nguyên index gốc qua .map((x,i)=>({x,i})) trước khi filter.
+        // Chia hiển thị theo đúng 4 khu của "Thực đơn hôm nay" (dishCategory(),
+        // xem homeView()). data-i PHẢI là chỉ số THẬT trong md.items (không
+        // phải chỉ số trong nhóm) vì các handler md-name/md-price/md-del dùng
+        // đúng chỉ số đó để sửa/xoá S.md.items[i] — nhóm theo category nhưng
+        // giữ nguyên index gốc qua .map((x,i)=>({x,i})) trước khi nhóm.
+        if (!md.items.length) return `<p class="muted">Chưa có món nào.</p>`;
         const withIdx = md.items.map((x,i)=>({x,i}));
-        const lunchRows = withIdx.filter(r=>r.x.price==null), specialRows = withIdx.filter(r=>r.x.price!=null);
+        const byCat = {}; withIdx.forEach(r=>{ const c=dishCategory(r.x); (byCat[c]=byCat[c]||[]).push(r); });
         const row = ({x,i}) => `<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
           <input type="number" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)">
           <button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button></div>`;
-        if (!md.items.length) return `<p class="muted">Chưa có món nào.</p>`;
-        return (lunchRows.length?`<h3 class="sec-sub">Combo ${money(unitPrice())} (2 món)</h3>${lunchRows.map(row).join("")}`:"")
-          + (specialRows.length?`<h3 class="sec-sub" style="margin-top:${lunchRows.length?"14px":"0"}">Món riêng</h3>${specialRows.map(row).join("")}`:"");
+        return CATEGORY_ORDER.filter(c=>byCat[c]?.length).map((c,idx)=>`<h3 class="sec-sub" style="margin-top:${idx?"14px":"0"}">${categoryLabel(c)}</h3>${byCat[c].map(row).join("")}`).join("");
       })()}
       <button class="btn" data-a="md-add-one" style="margin-top:10px">+ Thêm 1 món</button>
       ${md.items.length?`<p class="small muted" style="margin-top:8px">Để trống ô giá = tính theo giá suất thường. Nhập giá riêng nếu món này giá khác — chỉ áp dụng khi suất chỉ chọn 1 mình món đó.</p>`:""}
