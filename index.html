@@ -501,7 +501,19 @@ function saveLastMenuLocal(shopName, menu){ try{ lsSet("comtrua:lastMenu", JSON.
 function lastBankLocal(){ try{ return JSON.parse(lsGet("comtrua:lastBank")||"null"); }catch{ return null; } }
 function saveLastBankLocal(bank){ try{ lsSet("comtrua:lastBank", JSON.stringify(bank)); }catch{} }
 function ensureMd(mode){
-  if (S.md) return;
+  const live0 = mode==="edit" && !!S.session;
+  // Draft cũ khôi phục từ localStorage (loadDraft(), lưu từ TRƯỚC khi có
+  // WEEK_MENU, hoặc từ một ngày khác) không được biết auto-fill mới, và
+  // nếu giữ nguyên draftDate cũ khác hôm nay thì thực đơn không còn đúng
+  // thứ nữa. Chỉ tin S.md có sẵn khi nó KHỚP đúng mode hiện tại và (với
+  // mode "new") đúng ngày hôm nay (giờ VN) — ngược lại coi như chưa có,
+  // xây lại từ đầu để auto-fill chạy đúng.
+  if (S.md){
+    const sameMode = S.md.mode===(live0?"edit":"new");
+    const staleNewDraft = !live0 && S.md.draftDate!==todayStr();
+    if (sameMode && !staleNewDraft) return;
+    S.md=null; S.mdRestored=false;
+  }
   const s=S.session, live = mode==="edit" && !!s;
   const left = live ? Math.max(5, Math.round((deadlineAt(s)-Date.now())/60000/5)*5) : 30;
   const lastLocal = live ? null : lastMenuLocal();
@@ -512,6 +524,7 @@ function ensureMd(mode){
   const autoItems = live ? [] : weekMenuItemsForToday();
   S.md = { items: live ? clone(s.menu) : autoItems, minutes: left, autoClose: live ? s.autoClose!==false : true,
     hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (lastLocal?.shopName||""), text:"", mode: live?"edit":"new",
+    draftDate: live ? undefined : todayStr(),
     bankBin: live ? (s.bankBin||"970436") : (lastBank?.bankBin||"970436"),
     bankName: live ? (s.bankName||"Vietcombank") : (lastBank?.bankName||"Vietcombank"),
     accountNo: live ? (s.accountNo||"") : (lastBank?.accountNo||""),
@@ -1068,8 +1081,12 @@ async function onClick(e){
       // Nếu vừa khôi phục draft từ localStorage (refresh giữa chừng lúc
       // đang sửa thực đơn) và đúng mode đang mở lại, GIỮ draft đó thay vì
       // xoá — chỉ dùng cờ 1 lần rồi bỏ, các lần bấm sau vẫn reset như cũ.
-      if (S.md && S.mdRestored && S.md.mode===(v==="edit"?"edit":"new")){ S.mdRestored=false; }
-      else { S.md=null; ensureMd(v==="edit"?"edit":"new"); }
+      // Với mode "new" còn phải đúng NGÀY hôm nay nữa — draft "new" từ hôm
+      // khác đã lỗi thời (menu tuần khác thứ), không giữ.
+      const wantEdit = v==="edit";
+      const restoredOk = S.md && S.mdRestored && S.md.mode===(wantEdit?"edit":"new") && (wantEdit || S.md.draftDate===todayStr());
+      if (restoredOk){ S.mdRestored=false; }
+      else { S.md=null; ensureMd(wantEdit?"edit":"new"); }
       S.view="create";
       window.scrollTo({top:0}); break; }
     case "new-group": {
