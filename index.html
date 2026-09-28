@@ -225,7 +225,19 @@ const money = n => Math.round(Number(n)||0).toLocaleString("vi-VN") + "đ";
 const clone = o => JSON.parse(JSON.stringify(o ?? null));
 const rid = () => Math.random().toString(36).slice(2, 10);
 const pad = n => String(n).padStart(2, "0");
-function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+// App luôn tính "hôm nay" theo GIỜ VIỆT NAM (Asia/Ho_Chi_Minh, UTC+7), bất kể
+// múi giờ hệ điều hành/trình duyệt của người dùng — quan trọng cho menu tự
+// động theo thứ (xem WEEK_MENU) và cho việc khoá đơn theo ngày. Không dùng
+// new Date().getFullYear()/getMonth()/getDate() (giờ local máy) ở đây.
+const VN_TZ = "Asia/Ho_Chi_Minh";
+function vnParts(t=Date.now()){
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: VN_TZ, year:"numeric", month:"2-digit", day:"2-digit", weekday:"short" });
+  const p = {}; for (const x of fmt.formatToParts(t)) p[x.type]=x.value;
+  const WD_EN = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+  return { y:+p.year, m:+p.month, d:+p.day, weekday: WD_EN[p.weekday] };
+}
+function todayStr(){ const p=vnParts(); return `${p.y}-${pad(p.m)}-${pad(p.d)}`; }
+function todayWeekday(){ return vnParts().weekday; } // 0=Chủ nhật..6=Thứ Bảy, theo giờ VN
 const WD = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
 function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T00:00:00"); return `${WD[d.getDay()]}, ${d.getDate()}/${d.getMonth()+1}`; }
 const hhmm = t => { const d=new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -317,6 +329,47 @@ function setPrice(picks, base=unitPrice()){
   return customTotal + regularTotal;
 }
 const priceRule = (b=unitPrice()) => `1 món ${money(b)}, 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
+// Menu tuần cố định của quán (ảnh WEEK MENU host gửi) — chỉ tên tiếng Việt.
+// Dùng để TỰ tạo thực đơn theo đúng thứ trong tuần (giờ Việt Nam), không bắt
+// host chọn món tay mỗi lần. Chỉ lấy Lunch + Special theo đúng yêu cầu —
+// bỏ qua Breakfast, Snack và 2 món "phục vụ cả ngày".
+// - lunch: 5 món/ngày, combo 2 món luôn 35k => KHÔNG gắn giá riêng (price:
+//   null), để setPrice() tự tính theo công thức base (2 món = giá base).
+// - special: 1 món 45k/món => gắn giá riêng cố định 45000, vì đây là giá
+//   BÁN LẺ từng món, không phải giá combo theo công thức base.
+// Không có Thứ 7/Chủ nhật trong menu tuần này -> weekday 0 và 6 không có key,
+// ensureMd() sẽ để thực đơn trống, host tự thêm món qua nút "+ Thêm 1 món".
+const WEEK_MENU = {
+  1: { // Thứ Hai
+    lunch: ["Thịt kho trứng","Cánh gà chiên nước mắm","Basa file chiên sốt cà","Đậu hũ dồn thịt sốt cà","Trứng chiên thịt băm"],
+    special: ["Mì cuộn trứng xúc xích","Ức gà rang muối Hồng Kông"]
+  },
+  2: { // Thứ Ba
+    lunch: ["Cốt lết ram mặn","Lòng heo xào cải chua","Gà nướng muối ớt","Khổ qua dồn thịt","Chả lụa sốt dầu hào"],
+    special: ["Bò sốt tiêu đen","Cơm gà Hải Nam"]
+  },
+  3: { // Thứ Tư
+    lunch: ["Thịt luộc + kim chi","Cá diêu hồng chiên + xoài","Cà ri gà","Mướp xào nấm rơm","Chả trứng cá mồi"],
+    special: ["Cốt lết nướng","Cơm chiên cá mặn"]
+  },
+  4: { // Thứ Năm
+    lunch: ["Thịt heo xào sả nghệ","Tôm ram hành","Gỏi ức gà hành tây","Khô cá dứa chiên","Đậu hũ sốt thịt băm"],
+    special: ["Bò sốt tiêu đen","Cơm chiên cá mặn"]
+  },
+  5: { // Thứ Sáu
+    lunch: ["Gà chiên bơ tỏi","Thịt xào đậu đũa","Khổ qua xào trứng","Ức gà áp chảo","Cá basa kho tiêu"],
+    special: ["Cơm chiên tỏi"]
+  }
+};
+// Xây S.md.items từ WEEK_MENU cho đúng thứ hôm nay (giờ VN). Trả về [] nếu
+// hôm nay là Thứ 7/Chủ nhật hoặc không có menu — ensureMd() sẽ để trống.
+function weekMenuItemsForToday(){
+  const day = WEEK_MENU[todayWeekday()]; if (!day) return [];
+  const items = [];
+  for (const nameVi of day.lunch) items.push({ id:null, nameVi, price:null });
+  for (const nameVi of day.special) items.push({ id:null, nameVi, price:45000 });
+  return items;
+}
 const curDate = () => S.session?.date;
 const curKey = () => S.sessKey;
 // Link gửi cho team: link gốc (ARTIFACT_URL, không query) + ?order=<order_token>
@@ -453,7 +506,11 @@ function ensureMd(mode){
   const left = live ? Math.max(5, Math.round((deadlineAt(s)-Date.now())/60000/5)*5) : 30;
   const lastLocal = live ? null : lastMenuLocal();
   const lastBank = live ? null : lastBankLocal();
-  S.md = { items: live ? clone(s.menu) : [], minutes: left, autoClose: live ? s.autoClose!==false : true,
+  // Đơn nhóm MỚI (không phải sửa đơn đang mở): tự điền thực đơn theo đúng
+  // thứ hôm nay (giờ VN) từ WEEK_MENU — host không cần tự chọn món, chỉ cần
+  // dùng "+ Thêm 1 món" nếu muốn thêm món đặc biệt ngoài menu tuần.
+  const autoItems = live ? [] : weekMenuItemsForToday();
+  S.md = { items: live ? clone(s.menu) : autoItems, minutes: left, autoClose: live ? s.autoClose!==false : true,
     hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (lastLocal?.shopName||""), text:"", mode: live?"edit":"new",
     bankBin: live ? (s.bankBin||"970436") : (lastBank?.bankBin||"970436"),
     bankName: live ? (s.bankName||"Vietcombank") : (lastBank?.bankName||"Vietcombank"),
@@ -952,6 +1009,7 @@ function createView(){
     </div>
     <div class="band"></div>
     <div class="pad"><h2 class="sec">Thực đơn hôm nay</h2>
+      ${!live?`<p class="small muted" style="margin:0 0 10px">Tự động điền theo menu tuần của quán (${esc(WD[todayWeekday()])}). Dùng nút "+ Thêm 1 món" bên dưới nếu muốn thêm món đặc biệt ngoài menu tuần.</p>`:`
       ${S.imagesOK?`<p class="small muted" style="margin:0 0 10px">Tải ảnh menu quán gửi, Claude sẽ tự đọc ra danh sách món.</p>
       <div class="drop" id="drop" data-a="pick-file" tabindex="0" role="button" aria-label="Chọn ảnh menu">
         ${ai?.busy?`<b><span class="spin"></span> Claude đang đọc menu…</b><div class="small muted">Thường mất 10 đến 30 giây</div>`:`<b>Tải ảnh menu</b><div class="small muted">Bấm để chọn ảnh, kéo thả, hoặc dán (Ctrl+V)</div>`}
@@ -965,12 +1023,13 @@ function createView(){
       </details>
       <details class="more" data-k="text" ${S.open.text?"open":""}><summary><span>Dán text menu</span>${I.chev}</summary>
         <textarea id="md-text" data-f="md-text" placeholder="Mỗi dòng một món">${esc(md.text||"")}</textarea>
-        <div class="row" style="margin-top:8px"><button class="btn" data-a="md-text-add">Thêm vào thực đơn</button><button class="btn" data-a="md-add-one">+ Thêm 1 món trống</button></div>
-      </details>
+        <div class="row" style="margin-top:8px"><button class="btn" data-a="md-text-add">Thêm vào thực đơn</button></div>
+      </details>`}
       <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
       ${md.items.map((x,i)=>`<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
         <input type="number" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)">
         <button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+      <button class="btn" data-a="md-add-one" style="margin-top:10px">+ Thêm 1 món</button>
       ${md.items.length?`<p class="small muted" style="margin-top:8px">Để trống ô giá = tính theo giá suất thường. Nhập giá riêng nếu món này giá khác — chỉ áp dụng khi suất chỉ chọn 1 mình món đó.</p>`:""}
     </div>
     <div class="bottom"><div class="in"><button class="cta" data-a="publish" ${S.busy||!md.items.length?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${live?"Cập nhật đơn hàng nhóm":"Tạo đơn hàng nhóm"}</button></div></div>

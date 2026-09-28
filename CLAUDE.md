@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Read both of these before making non-trivial changes — they are the authoritative specs and disagree with each other in places (see below):
 - [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) — original product/business spec (Vietnamese), written for the old Claude Artifact version. Pricing formula, "đặt hộ" (order-on-behalf-of) flow, and VietQR payload details are still accurate. Its "Mô hình dữ liệu" (§4) and "Vai trò" (§2) sections are **obsolete** — permissions and data model were redesigned for Supabase (see below).
 - `C:\Users\Huan\.claude\projects\d--1--Personal-Working-7--AL-Lunch\memory\al-lunch-migration.md` (auto-memory) — current permissions architecture, decisions made and rejected during the migration, fixed bugs, and pending tasks. This is the up-to-date source for anything PROJECT_HANDOFF.md's old sections contradict.
+- [WORK_LOG.md](WORK_LOG.md) — per-session changelog (newest first) of pilot feedback fixes and why each change was made. Check it for recent context before assuming a behavior is unhandled.
 
 Files:
 - `index.html` — the live app (HTML + CSS + vanilla JS in one file). This is what to edit.
