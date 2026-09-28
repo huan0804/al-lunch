@@ -72,7 +72,7 @@ Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) liv
 
 ## Key business rules (see PROJECT_HANDOFF.md §3 for full detail; still accurate)
 
-- Price per set: `setPrice(n) = Math.round(base * Math.max(n, 2) / 2 / 1000) * 1000` where `base` = `pricePerSet` (default 35,000₫, now stored per-session). 1 dish = double portion at base price; 2 dishes = standard; 3+ scales up.
+- Price per set (`comboSetPrice()` in [index.html](index.html), `base` = `pricePerSet`, default 35,000₫, stored per-session): for COMBO dishes only (dishes with `price == null`) — 2 dishes = `base`; 1 dish = `base - 5000` if it's the *only* thing in the set, or a flat 20,000₫ if it's riding along with ≥1 priced dish (see below); 3+ dishes = `base + (n-2) * 20000`. Dishes with a fixed `price` (e.g. Special 45,000₫) always add their listed price on top, uncapped — `setPrice(picks)` sums `customTotal + comboSetPrice(comboCount, base, customTotal > 0)`. This replaced an older `Math.round(base * Math.max(n,2) / 2 / 1000) * 1000` formula (2025-09-28, pilot feedback) — don't resurrect the old rounding formula.
 - A day can have multiple, independently-owned order sessions in parallel (see three-tier link model above). A session locks when `status === "closed"`, its date is in the past, or (if `autoClose`) the deadline has passed; the session's own host can always edit via their `?manage=` link.
 - "Đặt hộ" (order-on-behalf-of): one payer can order and pay for multiple named guests in a single order/QR/payment-confirmation, with per-guest dish tabs.
 - Backward compatibility matters: older sessions/orders may lack newer fields — code has defaulting helpers (`qtyOf`, `deadlineAt()`) for this; preserve that pattern when adding fields.

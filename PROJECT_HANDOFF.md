@@ -43,6 +43,8 @@ App thay cho việc gom đơn bằng tay trong nhóm chat. Nó phải:
 
 ### 3.1 Giá theo số món trong một suất
 
+> ⚠️ **Bảng và công thức dưới đây đã lỗi thời** (thay đổi 2025-09-28 theo phản hồi pilot). Xem `comboSetPrice()`/`setPrice()` trong [index.html](index.html) và mục "Key business rules" trong [CLAUDE.md](CLAUDE.md) để biết công thức hiện hành — tóm tắt: món COMBO (giá thường) tính riêng theo số lượng (1 món=30k, 2 món=35k=base, từ món 3 mỗi món +20k, và 1 món combo chỉ =20k nếu đi kèm ít nhất 1 món GIÁ RIÊNG); món giá riêng (VD Special 45k) luôn cộng thẳng giá niêm yết, không theo bảng dưới.
+
 Giá cơ bản `pricePerSet` mặc định là 35.000đ, host chỉnh được trong Cài đặt.
 
 | Số món | Cách tính | Giá (base 35k) | Phần ăn |
@@ -51,7 +53,7 @@ Giá cơ bản `pricePerSet` mặc định là 35.000đ, host chỉnh được t
 | 2 | Suất chuẩn | 35.000đ | Mỗi món 1 phần |
 | n ≥ 3 | base/2 × n, làm tròn đến nghìn | 3 món 53k, 4 món 70k, 5 món 88k, 6 món 105k | Mỗi món 1 phần |
 
-Công thức trong code:
+Công thức trong code (CŨ — đã thay thế, xem cảnh báo ở đầu mục này):
 
 ```js
 setPrice(n) = Math.round(base * Math.max(n, 2) / 2 / 1000) * 1000

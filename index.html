@@ -305,31 +305,36 @@ const S = {
 const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
 const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
 // picks: mảng id món (từ cart/item sheet) HOẶC số lượng món (dùng nội bộ
-// cho priceRule() khi chưa có món cụ thể, luôn coi là món thường).
-// Món có giá riêng LUÔN cộng đúng giá niêm yết của nó vào tổng suất, dù đi
-// kèm bao nhiêu món khác. Các món THƯỜNG còn lại trong suất tính theo đúng
-// công thức base cũ dựa trên SỐ LƯỢNG món thường đó — NHƯNG khi chỉ có
-// đúng 1 món thường đi kèm ít nhất 1 món giá riêng khác, không gấp đôi giá
-// (base/2, không phải base) vì quy tắc "1 món = gấp đôi" chỉ áp dụng khi cả
-// suất thật sự chỉ có 1 món duy nhất. VD base 35k: 45k (riêng) + 1 món
-// thường = 45.000+17.500=62.500đ; 45k (riêng) + 2 món thường = 45.000+35.000
-// =80.000đ; 45k (riêng) + 3 món thường = 45.000+53.000=98.000đ (coi 3 món
-// thường như 1 suất 3 món độc lập, dùng nguyên setPrice(3)).
+// cho priceRule() khi chưa có món cụ thể, luôn coi là món combo thường).
+// Món có giá riêng (customs, VD Special 45k) LUÔN cộng đúng giá niêm yết
+// của nó vào tổng suất, dù đi kèm bao nhiêu món combo khác; phần món COMBO
+// còn lại trong suất tính riêng theo comboSetPrice() bên dưới.
+// Giá N món COMBO (không phải món giá riêng): 2 món = đúng giá base (35k),
+// từ món thứ 3 trở đi mỗi món thêm CỐ ĐỊNH 20.000đ. Riêng bậc "chỉ 1 món"
+// có 2 mức khác nhau tuỳ có món GIÁ RIÊNG (45k...) đi kèm hay không — hasCustom
+// phân biệt 2 case này:
+//  - Combo đứng MỘT MÌNH (không món riêng nào đi kèm): 1 món = 30.000đ
+//    ("1 phần rất ít" nếu tính base/2=17.500đ nên host quy định giá sàn riêng).
+//  - Combo đi kèm ÍT NHẤT 1 món riêng: 1 món combo chỉ tính 20.000đ (bằng
+//    đúng mức "món thêm" — vì phần chính bụng đã no nhờ món riêng rồi).
+// VD base 35k: 1 món (đứng riêng)=30k; 1 món (kèm 45k)=45k+20k=65k;
+// 2 món=35k dù kèm gì; 3 món=35k+20k=55k (hoặc +45k=100k nếu kèm món riêng).
+const COMBO_EXTRA_STEP = 20000;
+function comboSetPrice(n, base=unitPrice(), hasCustom=false){
+  if (n<=0) return 0;
+  if (n===1) return hasCustom ? COMBO_EXTRA_STEP : base - 5000;
+  if (n===2) return base;
+  return base + (n-2)*COMBO_EXTRA_STEP;
+}
 function setPrice(picks, base=unitPrice()){
-  if (!Array.isArray(picks)){ const n=picks; return n<=0?0:Math.round(base*Math.max(n,2)/2/1000)*1000; }
+  if (!Array.isArray(picks)) return comboSetPrice(picks, base);
   if (picks.length<=0) return 0;
   const customs=[], regularIds=[];
   picks.forEach(id=>{ const p=dishById(id)?.price; if(p!=null) customs.push(Number(p)); else regularIds.push(id); });
-  if (!customs.length) return Math.round(base*Math.max(regularIds.length,2)/2/1000)*1000;
   const customTotal = customs.reduce((a,b)=>a+b,0);
-  if (!regularIds.length) return customTotal;
-  // 1 món thường đi kèm: KHÔNG làm tròn đến nghìn — base/2 có thể lẻ 500đ
-  // (VD base 35k → 17.500đ) và người dùng muốn giữ đúng số lẻ đó thay vì
-  // làm tròn lên, khác với mọi chỗ khác trong app vốn luôn tròn nghìn.
-  const regularTotal = regularIds.length===1 ? base/2 : Math.round(base*regularIds.length/2/1000)*1000;
-  return customTotal + regularTotal;
+  return customTotal + comboSetPrice(regularIds.length, base, customs.length>0);
 }
-const priceRule = (b=unitPrice()) => `1 món ${money(b)}, 2 món ${money(b)}, từ 3 món trở lên mỗi món ${money(b/2)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
+const priceRule = (b=unitPrice()) => `1 món ${money(comboSetPrice(1,b))}, 2 món ${money(b)}, từ 3 món trở lên mỗi món thêm ${money(COMBO_EXTRA_STEP)}: 3 món ${money(setPrice(3,b))}, 4 món ${money(setPrice(4,b))}, 5 món ${money(setPrice(5,b))}`;
 // Menu tuần cố định của quán (ảnh WEEK MENU host gửi) — chỉ tên tiếng Việt.
 // Dùng để TỰ tạo thực đơn theo đúng thứ trong tuần (giờ Việt Nam), không bắt
 // host chọn món tay mỗi lần. Chỉ lấy Lunch + Special theo đúng yêu cầu —
@@ -342,26 +347,43 @@ const priceRule = (b=unitPrice()) => `1 món ${money(b)}, 2 món ${money(b)}, t�
 // ensureMd() sẽ để thực đơn trống, host tự thêm món qua nút "+ Thêm 1 món".
 const WEEK_MENU = {
   1: { // Thứ Hai
+    breakfast: [["Hủ tiếu nam vang",35000],["Bún gạo xào",30000],["Bánh mì ốp la",25000]],
     lunch: ["Thịt kho trứng","Cánh gà chiên nước mắm","Basa file chiên sốt cà","Đậu hũ dồn thịt sốt cà","Trứng chiên thịt băm"],
-    special: ["Mì cuộn trứng xúc xích","Ức gà rang muối Hồng Kông"]
+    special: ["Mì cuộn trứng xúc xích","Ức gà rang muối Hồng Kông"],
+    snack: [["Bột chiên",25000],["Khoai tây chiên",20000]]
   },
   2: { // Thứ Ba
+    breakfast: [["Mì quảng gà",35000],["Bún gạo xào",30000],["Bánh mì ốp la",25000]],
     lunch: ["Cốt lết ram mặn","Lòng heo xào cải chua","Gà nướng muối ớt","Khổ qua dồn thịt","Chả lụa sốt dầu hào"],
-    special: ["Bò sốt tiêu đen","Cơm gà Hải Nam"]
+    special: ["Bò sốt tiêu đen","Cơm gà Hải Nam"],
+    snack: [["Phá lấu lòng bò",25000],["Khoai tây chiên",20000]]
   },
   3: { // Thứ Tư
+    breakfast: [["Bò kho + bánh mì",35000],["Bánh hỏi heo quay",35000],["Bánh mì ốp la",25000]],
     lunch: ["Thịt luộc + kim chi","Cá diêu hồng chiên + xoài","Cà ri gà","Mướp xào nấm rơm","Chả trứng cá mồi"],
-    special: ["Cốt lết nướng","Cơm chiên cá mặn"]
+    special: ["Cốt lết nướng","Cơm chiên cá mặn"],
+    snack: [["Bánh xèo miền Trung",30000],["Khoai tây chiên",20000]]
   },
   4: { // Thứ Năm
+    breakfast: [["Bún riêu",35000],["Bún gạo xào",30000],["Bánh mì ốp la",25000]],
     lunch: ["Thịt heo xào sả nghệ","Tôm ram hành","Gỏi ức gà hành tây","Khô cá dứa chiên","Đậu hũ sốt thịt băm"],
-    special: ["Bò sốt tiêu đen","Cơm chiên cá mặn"]
+    special: ["Bò sốt tiêu đen","Cơm chiên cá mặn"],
+    snack: [["Gỏi cuốn",15000],["Khoai tây chiên",20000]]
   },
   5: { // Thứ Sáu
+    breakfast: [["Bún bò Huế",35000],["Bún nước tương",30000],["Bánh mì ốp la",25000]],
     lunch: ["Gà chiên bơ tỏi","Thịt xào đậu đũa","Khổ qua xào trứng","Ức gà áp chảo","Cá basa kho tiêu"],
-    special: ["Cơm chiên tỏi"]
+    special: ["Cơm chiên tỏi"],
+    snack: [["Khoai tây chiên",20000]]
   }
 };
+// Combo đồ chiên (chả giò, cá viên, tôm viên, đậu bắp...) xuất hiện mọi ngày
+// trong ảnh WEEK MENU nhưng KHÔNG có giá niêm yết -> không đưa vào
+// WEEK_MENU.snack (sẽ không có giá đúng để gắn); host tự thêm bằng "+ Thêm
+// 1 món" nếu muốn bán món này, tự nhập giá theo báo giá thực tế của quán.
+// breakfast/snack hiện chỉ là DỮ LIỆU THAM KHẢO, chưa được weekMenuItemsForToday()
+// đưa vào thực đơn tự động (xem comment ngay dưới) — chỉ lunch+special được
+// tự động điền như trước, giữ đúng hành vi cũ để không đổi UX ngoài ý muốn.
 // Xây S.md.items từ WEEK_MENU cho đúng thứ hôm nay (giờ VN). Trả về [] nếu
 // hôm nay là Thứ 7/Chủ nhật hoặc không có menu — ensureMd() sẽ để trống.
 function weekMenuItemsForToday(){
@@ -483,6 +505,10 @@ async function submitCart(){
     await mutateOrder(c.docId, c.date, ()=>order);
     if (isHostSelf) await S.db.doc("sessions/"+c.date).update({status:"closed"});
     if (c.docId===S.uid) lsSet("comtrua:name", order.name);
+    // Ghi lịch sử cho GUEST đặt món qua link ?order= (host đã tự ghi ở
+    // publishGroup() khi tạo/sửa session) — role "guest" vì chỉ có
+    // orderToken, không có quyền quản lý session này.
+    if (!S.canEdit) saveHistoryEntry({ sessionKey:S.sessKey, date:S.session?.date, shopName:S.session?.shopName||"", hostName:S.session?.hostName||"", role:"guest", orderToken:S.session?.orderToken });
     S.cart=null; S.view="cart";
     toast(isHostSelf ? "Đã đặt món và khoá đơn nhóm. Gửi danh sách bên dưới cho quán nhé." : reset ? "Đã lưu. Tổng tiền hoặc hình thức thay đổi nên trạng thái thanh toán được đặt lại." : "Đặt món thành công");
   }catch(e){ writeErr(e); }
@@ -501,6 +527,23 @@ function saveLastMenuLocal(shopName, menu){ try{ lsSet("comtrua:lastMenu", JSON.
 // gõ lại mỗi lần, nhưng không bao giờ hiện tài khoản của người khác.
 function lastBankLocal(){ try{ return JSON.parse(lsGet("comtrua:lastBank")||"null"); }catch{ return null; } }
 function saveLastBankLocal(bank){ try{ lsSet("comtrua:lastBank", JSON.stringify(bank)); }catch{} }
+
+// Lịch sử đơn ĐÃ MỞ TRÊN TRÌNH DUYỆT NÀY — không có đăng nhập/danh sách
+// toàn cục (xem "Ba cấp link" trong CLAUDE.md), nên đây là cách duy nhất
+// hợp với kiến trúc hiện tại để xem lại "mình từng đặt gì": ghi 1 dòng vào
+// localStorage máy này mỗi khi (a) tạo/sửa xong 1 session (publishGroup)
+// hoặc (b) đặt món xong (submitCart) trên máy này. Khoá theo sessionKey để
+// lần sau cùng session chỉ update chứ không tạo dòng trùng. Giới hạn 50
+// dòng gần nhất, mới nhất lên đầu, tránh phình localStorage vô hạn.
+const HISTORY_KEY = "comtrua:history";
+function loadHistory(){ try{ return JSON.parse(lsGet(HISTORY_KEY)||"[]"); }catch{ return []; } }
+function saveHistoryEntry(entry){
+  try{
+    const list = loadHistory().filter(x=>x.sessionKey!==entry.sessionKey);
+    list.unshift({...entry, at:Date.now()});
+    lsSet(HISTORY_KEY, JSON.stringify(list.slice(0,50)));
+  }catch{}
+}
 function ensureMd(mode){
   const live0 = mode==="edit" && !!S.session;
   // Draft cũ khôi phục từ localStorage (loadDraft(), lưu từ TRƯỚC khi có
@@ -595,12 +638,17 @@ async function publishGroup(){
       // Chuyển sang link quản lý của session vừa tạo — người tạo tự lưu/bookmark
       // link này để quay lại quản lý sau (không còn "đơn hiện tại" toàn cục).
       const created=await S.db.doc("sessions/"+key).get();
-      const manageToken=created.data()?.manageToken;
+      const manageToken=created.data()?.manageToken, orderToken=created.data()?.orderToken;
+      // Ghi lịch sử TRƯỚC KHI redirect — sau khi location.href đổi, trang
+      // tải lại từ đầu nên bất kỳ code nào sau dòng đó sẽ không chạy.
+      saveHistoryEntry({ sessionKey:key, date, shopName:md.shopName.trim(), hostName:md.hostName.trim(), role:"host", manageToken, orderToken });
       if (manageToken){
         const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
         location.href = `${base}?manage=${manageToken}`;
         return; // trang sẽ tải lại với URL mới, không cần render tiếp ở đây
       }
+    } else {
+      saveHistoryEntry({ sessionKey:key, date:S.session?.date||date, shopName:md.shopName.trim(), hostName:md.hostName.trim(), role:"host", manageToken:S.session?.manageToken, orderToken:S.session?.orderToken });
     }
     S.md=null; S.view="home"; S.sheet={kind:"share"};
     toast(isNew?"Đã tạo đơn hàng nhóm":"Đã cập nhật đơn hàng nhóm");
@@ -654,6 +702,7 @@ function view(){
   // Cài đặt chung (giá/tuỳ chọn) không gắn với quyền quản lý session nào —
   // ai cũng sửa được, giống việc ai cũng tạo được đơn mới.
   if (S.view==="bank") return bankView();
+  if (S.view==="history") return historyView();
   // Link gốc (không ?manage= hợp lệ, không ?order=) → không có session nào
   // để hiển thị, luôn ở màn "Tạo đơn nhóm mới". Ai mở link gốc cũng tạo
   // được đơn (không cần quyền gì) — xem ghi chú boot()/publishGroup().
@@ -966,15 +1015,19 @@ function hostSummary(){
   // "Giỏ hàng của bạn" / "Thành viên đã đặt" tách rời nhau.
   const people=[]; list.forEach(o=>groupSets(o).forEach(g=>people.push({
     who:g.who, byWhom: g.self?null:o.name,
-    line: g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [${st.note}]`:"")).join("; ")
+    line: g.sets.map(st=>(qtyOf(st)>1?qtyOf(st)+"x ":"")+setLabel(st)+(st.note?` [Ghi chú: ${st.note}]`:"")).join("; ")
   })));
   const peopleText = people.map(p=>`- ${p.who}${p.byWhom?` (${p.byWhom} đặt hộ)`:""}: ${p.line}`);
   const rows=Object.entries(portions).sort((a,b)=>b[1]-a[1]);
   // Copy gửi quán chỉ liệt kê THEO NGƯỜI (ai đặt gì) — bỏ phần tổng hợp
   // theo món (rows) khỏi text copy theo yêu cầu; rows vẫn dùng để hiển thị
   // trong khối "Tổng món gửi quán" trên UI bên dưới (details/summary), chỉ
-  // không đưa vào nội dung copy nữa.
-  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n\nTheo người (${peopleText.length} người):\n`+peopleText.join("\n")+(notes.length?`\n\nGhi chú:\n`+notes.map(x=>"- "+x).join("\n"):"");
+  // không đưa vào nội dung copy nữa. Ghi chú của từng người đã nằm ngay
+  // trong dòng của họ dạng "[Ghi chú: ...]" (xem peopleText/dòng line ở
+  // trên) — KHÔNG lặp lại thành khối "Ghi chú:" riêng ở cuối text copy nữa
+  // theo yêu cầu, dù `notes` vẫn giữ để hiển thị trong UI "Danh sách gửi
+  // quán" bên dưới (khối card riêng, không phải text copy).
+  const kitchen=`Đặt cơm ${fmtDate(s.date)}: ${totalSets} suất\n\nTheo người (${peopleText.length} người):\n`+peopleText.join("\n");
   const rec=list.filter(o=>o.payMethod!=="host"&&o.payStatus==="confirmed"), cash=list.filter(o=>o.payMethod==="cash"&&o.payStatus!=="confirmed"), tf=list.filter(o=>o.payMethod==="transfer"&&o.payStatus!=="confirmed");
   const sum=a=>a.reduce((x,o)=>x+o.total,0), unpaid=[...tf,...cash];
   const unpaidText=`Cơm ${fmtDate(s.date)}, còn chưa thanh toán:\n`+unpaid.map(o=>`- ${o.name}${o.guests?.length?` (gồm ${o.guests.join(", ")})`:""}: ${money(o.total)}${o.payMethod==="cash"?" (tiền mặt)":""}`).join("\n");
@@ -1018,8 +1071,13 @@ function createView(){
   const bankLogo = bankCode ? `<img class="bank-logo" src="https://api.vietqr.io/img/${bankCode}.png" alt="" onerror="this.style.display='none'">` : "";
   const bankLine = md.accountNo ? `${esc(md.bankName||"")} ${esc(String(md.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
   const canClose = live || !!S.fixedSessKey; // link gốc tạo đơn mới: không có "trang trước" để đóng về
+  // "Lịch sử đơn" chỉ hợp lý khi đang ở màn TẠO MỚI (không phải sửa 1 session
+  // cụ thể) — đây là màn đón người dùng khi mở link gốc, chỗ tự nhiên nhất để
+  // tìm lại đơn cũ đã từng mở trên máy này (xem historyView()).
+  const histCount = live ? 0 : loadHistory().length;
   return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
     <div class="pad">
+      ${!live?`<button class="btn" data-a="go" data-v="history" style="margin-bottom:14px">${I.clock} Lịch sử đơn đã đặt${histCount?` (${histCount})`:""}</button>`:""}
       <div class="grid" style="display:grid;gap:12px;margin-top:4px">
         <div><label class="f" for="md-host">Tên trưởng nhóm</label><input type="text" id="md-host" data-f="md-host" value="${esc(md.hostName)}" placeholder="VD: Nguyễn" maxlength="40"></div>
         <div><label class="f" for="md-shop">Tên quán (không bắt buộc)</label><input type="text" id="md-shop" data-f="md-shop" value="${esc(md.shopName)}" placeholder="VD: Cơm nhà Út" maxlength="60"></div>
@@ -1079,6 +1137,32 @@ function createView(){
     <div class="bottom"><div class="in"><button class="cta" data-a="publish" ${S.busy||!md.items.length?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${live?"Cập nhật đơn hàng nhóm":"Tạo đơn hàng nhóm"}</button></div></div>
   </div>`;
 }
+// Lịch sử đơn ĐÃ MỞ TRÊN TRÌNH DUYỆT NÀY (xem loadHistory()/saveHistoryEntry()
+// và ghi chú "Ba cấp link" trong CLAUDE.md — app không có đăng nhập/danh sách
+// toàn cục nên đây là cách duy nhất hợp kiến trúc để "xem lại lịch sử": danh
+// sách chỉ lưu local, không đọc được từ máy/trình duyệt khác).
+function historyView(){
+  const list = loadHistory();
+  // Hàng gồm 2 <button> anh em (không lồng nhau — HTML không cho phép
+  // button trong button), giống pattern "opt" ở khối "Chọn món đã từng có"
+  // (md-lib + lib-del, xem createView()).
+  const row = h => {
+    const token = h.manageToken || h.orderToken;
+    const roleTag = h.role==="host" ? `<span class="badge b-gry">Trưởng nhóm</span>` : `<span class="badge b-gry">Thành viên</span>`;
+    return `<div class="opt" style="display:flex;align-items:center;gap:8px">
+      <button data-a="hist-open" data-v="${esc(token||"")}" data-role="${h.manageToken?"manage":"order"}" style="flex:1;display:flex;align-items:center;gap:14px;border:0;background:none;padding:0;cursor:pointer;text-align:left">
+        <span class="t"><b>${esc(h.shopName||"Cơm trưa văn phòng")}</b><small>${esc(fmtDate(h.date))} — ${esc(h.hostName||"")} ${roleTag}</small></span>
+      </button>
+      <button class="icon" data-a="hist-del" data-v="${esc(h.sessionKey)}" aria-label="Xoá khỏi lịch sử" title="Xoá khỏi lịch sử" style="flex:none">${I.close}</button>
+    </div>`;
+  };
+  return `<div class="page">${topbar("Lịch sử đơn đã đặt", "Chỉ lưu trên trình duyệt này", "back", "", "home")}
+    <div class="pad">
+      ${list.length ? `<div class="between" style="margin-bottom:10px"><span class="small muted">${list.length} đơn</span><button class="link red" data-a="hist-clear">Xoá hết</button></div>
+      <div class="lib">${list.map(row).join("")}</div>` : `<div class="empty" style="padding-top:40px"><b>Chưa có lịch sử</b><p class="muted">Các đơn bạn tạo hoặc đặt món trên trình duyệt này sẽ hiện ở đây.</p></div>`}
+    </div>
+  </div>`;
+}
 function bankView(){
   // Chỉ còn cấu hình CHUNG toàn hệ thống (giá mặc định, tuỳ chọn thanh
   // toán, domain). Tài khoản nhận tiền không còn ở đây — mỗi người nhập
@@ -1108,6 +1192,18 @@ async function onClick(e){
   if (S.sheet?.kind==="confirm") return;
   switch(a){
     case "go": go(v); break;
+    case "hist-open": {
+      if (!v) return;
+      const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+      location.href = `${base}?${b.dataset.role}=${v}`;
+      return; }
+    case "hist-del": {
+      const list=loadHistory().filter(x=>x.sessionKey!==v);
+      lsSet(HISTORY_KEY, JSON.stringify(list));
+      render(); return; }
+    case "hist-clear": {
+      if (!(await ask("Xoá toàn bộ lịch sử đơn trên trình duyệt này? Không ảnh hưởng tới đơn hàng thật.", "Xoá hết", true))) return;
+      lsDel(HISTORY_KEY); render(); return; }
     case "create": {
       // Nếu vừa khôi phục draft từ localStorage (refresh giữa chừng lúc
       // đang sửa thực đơn) và đúng mode đang mở lại, GIỮ draft đó thay vì
