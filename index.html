@@ -760,8 +760,15 @@ function itemSheet(sh){
   const m=S.session?.menu||[], base=unitPrice();
   const multi = sh.index==null && (S.cart?.guests?.length||0)>0;
   const people=sheetPeople(), cur=sh.per[sh.active], n=cur.picks.length;
-  const opts=m.map(d=>{ const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
-    return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b></span><span class="cbox">${on?I.check:""}</span></button>`; }).join("");
+  // Chia 2 nhóm như màn "Thực đơn hôm nay": Combo (price==null, 2 món =
+  // giá base) và Món riêng (price!=null, giá cố định từng món) — cùng cách
+  // group đã dùng ở homeView()/createView(), chỉ khác là ở đây mỗi nút là
+  // checkbox chọn/bỏ theo id món, không có input sửa nên không cần giữ index.
+  const optRow = d => { const on=cur.picks.includes(d.id), dis=!on&&d.soldOut;
+    return `<button class="opt" role="checkbox" aria-checked="${on}" data-a="sh-pick" data-v="${esc(d.id)}" ${dis?"disabled":""}><span class="t"><b>${esc(d.nameVi)}${d.soldOut?" (hết)":""}</b>${d.price!=null?`<small>${money(d.price)}</small>`:""}</span><span class="cbox">${on?I.check:""}</span></button>`; };
+  const lunchM=m.filter(d=>d.price==null), specialM=m.filter(d=>d.price!=null);
+  const opts = (lunchM.length?`<h3 class="sec-sub">Combo ${money(base)} (2 món)</h3>${lunchM.map(optRow).join("")}`:"")
+    + (specialM.length?`<h3 class="sec-sub" style="margin-top:${lunchM.length?"14px":"0"}">Món riêng</h3>${specialM.map(optRow).join("")}`:"");
   const label = n===0 ? "Chọn ít nhất 1 món" : `${n} món: ${money(setPrice(cur.picks,base))}`;
   const filled = Object.entries(sh.per).filter(([,x])=>x.picks.length);
   const total = filled.reduce((a,[,x])=>a+setPrice(x.picks,base)*x.qty,0);
