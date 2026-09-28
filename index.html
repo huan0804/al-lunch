@@ -962,7 +962,11 @@ function cartView(){
     html += shown.map(o=>memberCard(o, host)).join("") || `<p class="muted">${others.length?"Không có đơn nào ở mục này.":"Chưa có ai khác đặt. Danh sách sẽ tự cập nhật khi có người đặt thêm."}</p>`;
     html += `</div>`;
   }
-  if (host) html += `<div class="pad" style="text-align:center;margin-top:18px"><button class="link red" data-a="delete-group">Xoá đơn hàng nhóm</button></div>`;
+  if (host){
+    html += `<div class="pad" style="text-align:center;margin-top:18px">`;
+    if (s.status==="closed") html += `<button class="btn" data-a="finish-session">${I.check} Hoàn tất, bắt đầu đơn mới</button><div style="height:12px"></div>`;
+    html += `<button class="link red" data-a="delete-group">Xoá đơn hàng nhóm</button></div>`;
+  }
   return `<div class="page">${html}</div>`;
 }
 function cartGroups(c){
@@ -1064,8 +1068,7 @@ function hostSummary(){
         <button class="btn" data-a="copy" data-t="${esc(unpaidText)}" ${unpaid.length?"":"disabled"}>Copy DS chưa trả</button>
       </div>
       <p class="small muted" style="margin:10px 0 0">Đối chiếu app ngân hàng theo nội dung <b>${esc(transferInfo(s.date,"").trim())} TÊN</b>, rồi bấm xác nhận ở từng thành viên.</p>
-      ${closed?`<div class="band" style="margin:16px -20px"></div><p class="small muted" style="margin:0 0 8px">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm nút dưới đây nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p><button class="btn dark" style="width:100%" data-a="reopen">${I.pen} Mở để sửa</button>
-      <button class="cta" style="width:100%;margin-top:10px" data-a="finish-session">${I.check} Hoàn tất đơn, bắt đầu đơn mới</button>`:""}
+      ${closed?`<div class="band" style="margin:16px -20px"></div><p class="small muted" style="margin:0 0 8px">Đơn đã khoá sau khi bạn xác nhận đặt món. Bấm nút dưới đây nếu cần thêm/sửa suất, sau đó xác nhận lại đơn của bạn để khoá lại.</p><button class="btn dark" style="width:100%" data-a="reopen">${I.pen} Mở để sửa</button>`:""}
     </div>
     </div>`;
 }
