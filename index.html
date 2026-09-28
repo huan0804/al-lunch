@@ -1050,9 +1050,22 @@ function createView(){
         <div class="row" style="margin-top:8px"><button class="btn" data-a="md-text-add">Thêm vào thực đơn</button></div>
       </details>`}
       <div class="between" style="margin-top:14px"><b style="font-size:17px">Món trong thực đơn (${md.items.length})</b>${md.items.length?`<button class="link red" data-a="md-clear">Xoá hết</button>`:""}</div>
-      ${md.items.map((x,i)=>`<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
-        <input type="number" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)">
-        <button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button></div>`).join("") || `<p class="muted">Chưa có món nào.</p>`}
+      ${(()=>{
+        // Chia hiển thị theo đúng cách màn "Thực đơn hôm nay" (home view)
+        // đang làm: có giá riêng (price != null) = Món riêng, còn lại = Combo
+        // Lunch. data-i PHẢI là chỉ số THẬT trong md.items (không phải chỉ
+        // số trong nhóm) vì các handler md-name/md-price/md-del dùng đúng
+        // chỉ số đó để sửa/xoá S.md.items[i] — lọc theo nhóm nhưng giữ
+        // nguyên index gốc qua .map((x,i)=>({x,i})) trước khi filter.
+        const withIdx = md.items.map((x,i)=>({x,i}));
+        const lunchRows = withIdx.filter(r=>r.x.price==null), specialRows = withIdx.filter(r=>r.x.price!=null);
+        const row = ({x,i}) => `<div class="mrow"><input type="text" id="mdn-${i}" data-f="md-name" data-i="${i}" value="${esc(x.nameVi)}" aria-label="Tên món ${i+1}">
+          <input type="number" id="mdp-${i}" data-f="md-price" data-i="${i}" inputmode="numeric" min="0" step="1000" value="${x.price!=null?x.price:""}" placeholder="Giá thường" aria-label="Giá riêng món ${i+1} (để trống nếu theo giá thường)">
+          <button class="icon" data-a="md-del" data-i="${i}" aria-label="Xoá món">${I.close}</button></div>`;
+        if (!md.items.length) return `<p class="muted">Chưa có món nào.</p>`;
+        return (lunchRows.length?`<h3 class="sec-sub">Combo ${money(unitPrice())} (2 món)</h3>${lunchRows.map(row).join("")}`:"")
+          + (specialRows.length?`<h3 class="sec-sub" style="margin-top:${lunchRows.length?"14px":"0"}">Món riêng</h3>${specialRows.map(row).join("")}`:"");
+      })()}
       <button class="btn" data-a="md-add-one" style="margin-top:10px">+ Thêm 1 món</button>
       ${md.items.length?`<p class="small muted" style="margin-top:8px">Để trống ô giá = tính theo giá suất thường. Nhập giá riêng nếu món này giá khác — chỉ áp dụng khi suất chỉ chọn 1 mình món đó.</p>`:""}
     </div>
