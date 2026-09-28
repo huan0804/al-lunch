@@ -964,7 +964,7 @@ function cartView(){
   }
   if (host){
     html += `<div class="pad" style="text-align:center;margin-top:18px">`;
-    if (s.status==="closed") html += `<button class="btn" data-a="finish-session">${I.check} Hoàn tất, bắt đầu đơn mới</button><div style="height:12px"></div>`;
+    if (s.status==="closed") html += `<button class="btn pri" data-a="finish-session">${I.check} Hoàn tất, bắt đầu đơn mới</button><div style="height:12px"></div>`;
     html += `<button class="link red" data-a="delete-group">Xoá đơn hàng nhóm</button></div>`;
   }
   return `<div class="page">${html}</div>`;
