@@ -567,17 +567,25 @@ function saveHistoryEntry(entry){
     lsSet(HISTORY_KEY, JSON.stringify(list.slice(0,50)));
   }catch{}
 }
+// Tăng số này mỗi khi WEEK_MENU/weekMenuItemsForToday() đổi cấu trúc (thêm
+// khu mới, đổi món...) — draft "new" cũ lưu trong localStorage TỪ TRƯỚC bản
+// đổi đó phải bị coi là stale và xây lại, dù cùng ngày hôm nay, nếu không
+// draft cũ (thiếu breakfast/snack, v.v.) sẽ được khôi phục y nguyên và che
+// mất auto-fill mới (xem staleNewDraft bên dưới — bug thật đã xảy ra
+// 2025-09-28 khi thêm breakfast/snack nhưng chỉ so draftDate, không so
+// version, nên đơn tạo cùng ngày trước đó vẫn hiện menu cũ).
+const WEEK_MENU_VERSION = 2;
 function ensureMd(mode){
   const live0 = mode==="edit" && !!S.session;
   // Draft cũ khôi phục từ localStorage (loadDraft(), lưu từ TRƯỚC khi có
-  // WEEK_MENU, hoặc từ một ngày khác) không được biết auto-fill mới, và
-  // nếu giữ nguyên draftDate cũ khác hôm nay thì thực đơn không còn đúng
-  // thứ nữa. Chỉ tin S.md có sẵn khi nó KHỚP đúng mode hiện tại và (với
-  // mode "new") đúng ngày hôm nay (giờ VN) — ngược lại coi như chưa có,
-  // xây lại từ đầu để auto-fill chạy đúng.
+  // WEEK_MENU, hoặc từ một ngày khác, HOẶC từ 1 phiên bản WEEK_MENU cũ hơn)
+  // không được biết auto-fill mới. Chỉ tin S.md có sẵn khi nó KHỚP đúng mode
+  // hiện tại và (với mode "new") đúng ngày hôm nay (giờ VN) VÀ đúng
+  // WEEK_MENU_VERSION hiện tại — ngược lại coi như chưa có, xây lại từ đầu
+  // để auto-fill chạy đúng.
   if (S.md){
     const sameMode = S.md.mode===(live0?"edit":"new");
-    const staleNewDraft = !live0 && S.md.draftDate!==todayStr();
+    const staleNewDraft = !live0 && (S.md.draftDate!==todayStr() || S.md.weekMenuVersion!==WEEK_MENU_VERSION);
     if (sameMode && !staleNewDraft) return;
     S.md=null; S.mdRestored=false;
   }
@@ -591,7 +599,7 @@ function ensureMd(mode){
   const autoItems = live ? [] : weekMenuItemsForToday();
   S.md = { items: live ? clone(s.menu) : autoItems, minutes: left, autoClose: live ? s.autoClose!==false : true,
     hostName: live ? s.hostName : (lsGet("comtrua:name")||""), shopName: live ? (s.shopName||"") : (lastLocal?.shopName||""), text:"", mode: live?"edit":"new",
-    draftDate: live ? undefined : todayStr(),
+    draftDate: live ? undefined : todayStr(), weekMenuVersion: live ? undefined : WEEK_MENU_VERSION,
     bankBin: live ? (s.bankBin||"970436") : (lastBank?.bankBin||"970436"),
     bankName: live ? (s.bankName||"Vietcombank") : (lastBank?.bankName||"Vietcombank"),
     accountNo: live ? (s.accountNo||"") : (lastBank?.accountNo||""),
@@ -1221,10 +1229,11 @@ async function onClick(e){
       // Nếu vừa khôi phục draft từ localStorage (refresh giữa chừng lúc
       // đang sửa thực đơn) và đúng mode đang mở lại, GIỮ draft đó thay vì
       // xoá — chỉ dùng cờ 1 lần rồi bỏ, các lần bấm sau vẫn reset như cũ.
-      // Với mode "new" còn phải đúng NGÀY hôm nay nữa — draft "new" từ hôm
-      // khác đã lỗi thời (menu tuần khác thứ), không giữ.
+      // Với mode "new" còn phải đúng NGÀY hôm nay VÀ đúng WEEK_MENU_VERSION
+      // nữa — draft "new" từ hôm khác hoặc từ trước khi WEEK_MENU đổi cấu
+      // trúc đã lỗi thời, không giữ (xem WEEK_MENU_VERSION/ensureMd()).
       const wantEdit = v==="edit";
-      const restoredOk = S.md && S.mdRestored && S.md.mode===(wantEdit?"edit":"new") && (wantEdit || S.md.draftDate===todayStr());
+      const restoredOk = S.md && S.mdRestored && S.md.mode===(wantEdit?"edit":"new") && (wantEdit || (S.md.draftDate===todayStr() && S.md.weekMenuVersion===WEEK_MENU_VERSION));
       if (restoredOk){ S.mdRestored=false; }
       else { S.md=null; ensureMd(wantEdit?"edit":"new"); }
       S.view="create";
