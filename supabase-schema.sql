@@ -143,30 +143,41 @@ alter table sessions drop constraint if exists sessions_account_name_len;
 alter table sessions add constraint sessions_account_name_len check (char_length(account_name) <= 100);
 alter table orders drop constraint if exists orders_name_len;
 alter table orders add constraint orders_name_len check (char_length(name) <= 40);
+-- guests/sets: CHECK constraint của Postgres KHÔNG cho phép subquery dưới
+-- bất kỳ hình thức nào (kể cả "not exists (select ... from
+-- jsonb_array_elements(...))") — lỗi "0A000: cannot use subquery in check
+-- constraint". Bọc điều kiện trong 1 function (IMMUTABLE, không đụng
+-- bảng nào) để CHECK gọi hàm thay vì tự chứa subquery — cách chuẩn để né
+-- giới hạn này.
+create or replace function guests_shape_ok(guests jsonb)
+returns boolean language sql immutable as $$
+  select jsonb_typeof(guests) = 'array'
+    and jsonb_array_length(guests) <= 20
+    and not exists (
+      select 1 from jsonb_array_elements_text(guests) g(name)
+      where char_length(g.name) > 40
+    )
+$$;
 -- guests: mảng tên đặt hộ — giới hạn số lượng người VÀ độ dài từng tên,
 -- tránh 1 request nhồi mảng khổng lồ hoặc tên siêu dài vào jsonb.
 alter table orders drop constraint if exists orders_guests_shape;
-alter table orders add constraint orders_guests_shape check (
-  jsonb_typeof(guests) = 'array'
-  and jsonb_array_length(guests) <= 20
-  and not exists (
-    select 1 from jsonb_array_elements_text(guests) g(name)
-    where char_length(g.name) > 40
-  )
-);
+alter table orders add constraint orders_guests_shape check (guests_shape_ok(guests));
+
+create or replace function sets_shape_ok(sets jsonb)
+returns boolean language sql immutable as $$
+  select jsonb_typeof(sets) = 'array'
+    and not exists (
+      select 1 from jsonb_array_elements(sets) s
+      where char_length(coalesce(s->>'note','')) > 120
+         or char_length(coalesce(s->>'for','')) > 40
+    )
+$$;
 -- sets: mỗi set có "note" (ghi chú cho quán, client giới hạn 120 ký tự) —
 -- chặn ở DB nếu note dài bất thường hoặc "for" (tên người được đặt hộ) dài
 -- bất thường; không parse sâu hơn vì "sets" còn nhiều field khác (dishes,
 -- qty, price) không cần giới hạn thêm ở đây.
 alter table orders drop constraint if exists orders_sets_shape;
-alter table orders add constraint orders_sets_shape check (
-  jsonb_typeof(sets) = 'array'
-  and not exists (
-    select 1 from jsonb_array_elements(sets) s
-    where char_length(coalesce(s->>'note','')) > 120
-       or char_length(coalesce(s->>'for','')) > 40
-  )
-);
+alter table orders add constraint orders_sets_shape check (sets_shape_ok(sets));
 -- Ký tự điều khiển (VD ký tự xuống dòng ẩn, null byte) trong tên hiển thị
 -- có thể phá layout hoặc dùng để nhồi log/thông báo giả — chặn cho các
 -- trường hiển thị ngắn (không áp dụng cho "note" vì ghi chú hợp lệ có thể
