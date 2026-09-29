@@ -104,6 +104,25 @@ create table if not exists orders (
 );
 create index if not exists orders_session_idx on orders (session_key);
 
+-- ---------- Bảng drafting (ai đang soạn đơn dở, chưa "Xác nhận đặt món") ----------
+-- Chỉ để HOST thấy tín hiệu nhẹ "X đang đặt..." trong lúc người đó còn
+-- đang chọn món — không lưu món/giá đang chọn dở (draft cart thật vẫn chỉ
+-- nằm trong bộ nhớ trình duyệt người đặt, xem index.html S.cart). 1 row
+-- ghi đè mỗi khi mở màn giỏ hàng; dọn bằng updated_at hết hạn (client tự
+-- lọc bỏ dòng quá cũ khi render — không cần cron xoá).
+create table if not exists drafting (
+  session_key text not null references sessions(key) on delete cascade,
+  doc_id text not null,
+  name text not null default '',
+  updated_at bigint not null,
+  primary key (session_key, doc_id)
+);
+create index if not exists drafting_session_idx on drafting (session_key);
+alter table drafting drop constraint if exists drafting_name_len;
+alter table drafting add constraint drafting_name_len check (char_length(name) <= 40);
+alter table drafting drop constraint if exists drafting_name_no_ctrl;
+alter table drafting add constraint drafting_name_no_ctrl check (name !~ '[\u0000-\u0008\u000B\u000C\u000E-\u001F]');
+
 -- ============================================================
 -- Giới hạn độ dài / chặn ký tự điều khiển (lớp phòng thủ thứ 2 sau
 -- maxlength ở client) — client chỉ chặn ở UI (input maxlength=...), ai
@@ -196,6 +215,7 @@ alter table config enable row level security;
 alter table sessions enable row level security;
 alter table dishes enable row level security;
 alter table orders enable row level security;
+alter table drafting enable row level security;
 
 -- Đọc: ai cũng đọc được (cần thiết để guest xem được menu/đơn qua link).
 drop policy if exists config_select on config;
@@ -206,6 +226,8 @@ drop policy if exists dishes_select on dishes;
 create policy dishes_select on dishes for select using (true);
 drop policy if exists orders_select on orders;
 create policy orders_select on orders for select using (true);
+drop policy if exists drafting_select on drafting;
+create policy drafting_select on drafting for select using (true);
 
 -- Ghi: mở cho tất cả (anon key). Xem ghi chú bảo mật ở đầu mục RLS —
 -- không có RPC xác thực host, mọi phân quyền nằm ở việc biết đúng URL.
@@ -217,6 +239,8 @@ drop policy if exists sessions_write on sessions;
 create policy sessions_write on sessions for all using (true) with check (true);
 drop policy if exists dishes_write on dishes;
 create policy dishes_write on dishes for all using (true) with check (true);
+drop policy if exists drafting_write on drafting;
+create policy drafting_write on drafting for all using (true) with check (true);
 
 -- ============================================================
 -- Dọn RPC của các bản thiết kế trước (PIN, rồi token host) — không
@@ -275,6 +299,9 @@ begin
   -- nhận qua test thật (xoá món thành công ở DB nhưng UI vẫn hiện).
   if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='dishes') then
     alter publication supabase_realtime add table dishes;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='drafting') then
+    alter publication supabase_realtime add table drafting;
   end if;
 end $$;
 

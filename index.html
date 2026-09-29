@@ -299,7 +299,7 @@ const HERO = `<svg viewBox="0 0 260 200" aria-hidden="true">
 /* ================= State ================= */
 const S = {
   db:null, sample:null, uid:null, canEdit:false, isOwner:false, imagesOK:false,
-  config:null, cfgLoaded:false, session:null, sessLoaded:false, orders:{}, ordersLoaded:false, dishes:[], recent:[],
+  config:null, cfgLoaded:false, session:null, sessLoaded:false, orders:{}, ordersLoaded:false, dishes:[], recent:[], drafting:{},
   view:"home", sheet:null, cart:null, md:null, mdRestored:false, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
 };
 const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
@@ -726,6 +726,31 @@ function render(){
   app.innerHTML=view(); overlay.innerHTML=sheetView();
   if (fid){ const el=document.getElementById(fid); if(el){ el.focus({preventScroll:true}); try{ if(s1!=null) el.setSelectionRange(s1,s2); }catch{} } }
   saveDraft();
+  syncDrafting();
+}
+// "X đang đặt...": chỉ báo hiệu khi CHÍNH mình (S.uid, không phải đặt hộ
+// proxy-xxxx và không phải host đang sửa đơn NGƯỜI KHÁC qua row-edit) có
+// giỏ hàng đang mở cho session hiện tại và chưa bấm "Xác nhận đặt món".
+// Ghi 1 lần khi bắt đầu (không phải mỗi keystroke, xem quyết định thiết
+// kế), rồi refresh updated_at định kỳ để dòng không bị coi là hết hạn;
+// xoá ngay khi rời cart/submit xong (case "cancel-cart"/"submit" set
+// S.cart=null) hoặc đổi sang session khác (watchSession()).
+let draftingState = null; // {sessionKey, docId} đã ghi lần gần nhất, tránh spam ghi lại mỗi render
+let draftingTimer = null;
+function syncDrafting(){
+  const shouldDraft = S.db && S.sessKey && S.cart && S.cart.date===curKey() && S.cart.docId===S.uid;
+  if (shouldDraft){
+    if (!draftingState || draftingState.sessionKey!==S.sessKey || draftingState.docId!==S.uid){
+      draftingState = { sessionKey:S.sessKey, docId:S.uid };
+      S.db.setDrafting(S.sessKey, S.uid, (S.cart.name||"").trim()).catch(()=>{});
+      clearInterval(draftingTimer);
+      draftingTimer = setInterval(()=>{ if(draftingState) S.db.setDrafting(draftingState.sessionKey, draftingState.docId, (S.cart?.name||"").trim()).catch(()=>{}); }, 30000);
+    }
+  } else if (draftingState){
+    clearInterval(draftingTimer); draftingTimer=null;
+    const { sessionKey, docId } = draftingState; draftingState = null;
+    S.db.clearDrafting(sessionKey, docId).catch(()=>{});
+  }
 }
 function view(){
   if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
@@ -959,6 +984,20 @@ function cartView(){
   }
   // other members
   const others = ordersFor(curKey()).filter(o=>o.docId!==S.uid && !(c && o.docId===c.docId));
+  // "Đang đặt món...": chỉ HOST thấy (guest không cần biết ai khác đang
+  // gõ dở) — lọc bỏ chính host, bỏ draft đã hết hạn (DRAFT_TTL_MS, coi như
+  // họ đã rời trang mà không dọn được vì mất mạng/đóng tab đột ngột thay
+  // vì phải chờ cron server xoá), và bỏ ai ĐÃ có đơn chính thức rồi (họ
+  // chuyển sang "Thành viên đã đặt" bên dưới, tránh hiện trùng 2 chỗ).
+  const DRAFT_TTL_MS = 90000;
+  const draftingNow = host ? Object.entries(S.drafting||{}).filter(([docId,d]) =>
+    docId!==S.uid && Date.now()-d.updatedAt < DRAFT_TTL_MS && !others.some(o=>o.docId===docId)
+  ) : [];
+  if (draftingNow.length){
+    html += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Đang đặt món (${draftingNow.length})</h2>`;
+    html += draftingNow.map(([docId,d]) => `<div class="card" style="display:flex;align-items:center;gap:10px"><span class="avatar">${esc((d.name||"?").trim()[0]||"?")}</span><div class="nm" style="flex:1"><b>${esc(d.name||"Chưa nhập tên")}</b><div class="small muted">Đang chọn món…</div></div><button class="icon" data-a="draft-del" data-v="${esc(docId)}" aria-label="Xoá">${I.close}</button></div>`).join("");
+    html += `</div>`;
+  }
   // Luôn hiện khối này (kể cả khi chưa ai khác đặt) để guest biết tính
   // năng "xem ai đang tham gia" tồn tại, cập nhật realtime khi có người
   // đặt thêm — trước đây ẩn hẳn khi others.length===0 khiến guest tưởng
@@ -1349,6 +1388,7 @@ async function onClick(e){
     case "row-ok": await setPay(v,{payStatus:"confirmed"}); break;
     case "row-undo": await setPay(v,{payStatus:"unpaid"}); break;
     case "row-del": { const o=S.orders[v]?.days?.[date]; if(!(await ask(`Xoá đơn của ${o?.name||"người này"}?`,"Xoá đơn",true))) return; try{ await mutateOrder(v,date,()=>null); toast("Đã xoá đơn"); }catch(err){ writeErr(err); } break; }
+    case "draft-del": { try{ await S.db.clearDrafting(S.sessKey, v); }catch(err){ writeErr(err); } break; }
     case "row-edit": { const o=S.orders[v]?.days?.[date]; if(!o) return; S.cart=newCart(v,o,v!==S.uid); window.scrollTo({top:0}); break; }
     case "proxy": S.cart=newCart("proxy-"+rid(), null, true); S.view="home"; toast("Chọn món cho người được đặt hộ"); window.scrollTo({top:0}); break;
     case "filter": S.filter=v; break;
@@ -1433,14 +1473,16 @@ setInterval(()=>{ if(S.session && !S.sheet) render(); }, 60000);
 // (guest xem/đặt món). Không có 1 trong 2 => không có session nào cả,
 // trang chủ luôn hiện màn "Tạo đơn nhóm mới" (xem view()). Không còn khái
 // niệm "đơn hiện tại" toàn cục (config.current đã bỏ khỏi schema).
-let unSess=null, curSess;
+let unSess=null, curSess, unDrafting=null;
 function watchSession(){
   const id = S.fixedSessKey || null;
   if(id===curSess) return; curSess=id; S.sessKey=id;
   unSess?.(); S.session=null;
+  unDrafting?.(); unDrafting=null; S.drafting={};
   if(!id){ S.sessLoaded=true; render(); return; }
   S.sessLoaded=false;
   unSess=S.db.doc("sessions/"+id).onSnapshot(s=>{ S.session=s.exists?s.data():null; S.sessLoaded=true; render(); }, err=>{ console.error(err); S.sessLoaded=true; render(); });
+  unDrafting=S.db.watchDrafting(id, rows=>{ S.drafting={}; rows.forEach(r=>S.drafting[r.doc_id]={name:r.name, updatedAt:r.updated_at}); render(); }, console.error);
 }
 (async function boot(){
   if (!window.SupabaseAdapter){ render(); return; }

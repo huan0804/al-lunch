@@ -183,6 +183,32 @@
     if (error) throw error;
   }
 
+  /* ---------- drafting: "X đang đặt..." (tín hiệu nhẹ, không phải đơn thật) ---------- */
+  async function setDrafting(sessionKey, docId, name){
+    const row = { session_key: sessionKey, doc_id: docId, name: name||"", updated_at: Date.now() };
+    const { error } = await sb.from("drafting").upsert(row, { onConflict: "session_key,doc_id" });
+    if (error) throw error;
+  }
+  async function clearDrafting(sessionKey, docId){
+    const { error } = await sb.from("drafting").delete().eq("session_key", sessionKey).eq("doc_id", docId);
+    if (error) throw error;
+  }
+  function watchDrafting(sessionKey, onNext, onErr){
+    let stopped = false;
+    const push = async () => {
+      try{
+        const { data, error } = await sb.from("drafting").select("*").eq("session_key", sessionKey);
+        if (error) throw error;
+        if (!stopped) onNext(data||[]);
+      }catch(e){ if(!stopped) onErr?.(e); }
+    };
+    push();
+    const channel = sb.channel(`drafting:${sessionKey}:${rid()}`)
+      .on("postgres_changes", { event:"*", schema:"public", table:"drafting", filter:`session_key=eq.${sessionKey}` }, push)
+      .subscribe();
+    return () => { stopped = true; sb.removeChannel(channel); };
+  }
+
   /* ---------- collection() ---------- */
   function coll(path){
     const parts = path.split("/");
@@ -232,7 +258,7 @@
     return q;
   }
 
-  const db = { doc, collection: coll, mutateOrder, findSessionKeyByOrderToken, findSessionKeyByManageToken };
+  const db = { doc, collection: coll, mutateOrder, findSessionKeyByOrderToken, findSessionKeyByManageToken, setDrafting, clearDrafting, watchDrafting };
 
   /* ---------- user ---------- */
   // canEdit/isOwner: chỉ true khi có ?manage=... trên URL VÀ nó khớp đúng
