@@ -918,6 +918,14 @@ function cartView(){
   const s=S.session, host=S.canEdit, locked=isLocked(), c=S.cart && S.cart.date===curKey() ? S.cart : null;
   const right = `<button class="pill" style="padding:8px 14px" data-a="share">${I.addp} Mời thêm</button>`;
   let html = topbar("Kiểm tra đơn hàng", s.shopName || fmtDate(s.date), "back", right);
+  // Máy này từng TẠO session này (đứng trưởng nhóm) nhưng đang mở lại bằng
+  // link guest ?order= (VD host lỡ thoát link ?manage= và chỉ còn link đã
+  // gửi cho nhóm) => tự nhận ra qua lịch sử local và chỉ thẳng lối vào lại
+  // đúng link quản lý, thay vì bắt tự tìm trang "Lịch sử đơn đã đặt".
+  if (!host){
+    const ownHist = loadHistory().find(h=>h.sessionKey===S.sessKey && h.role==="host" && h.manageToken);
+    if (ownHist) html += `<div class="pad" style="padding-bottom:0"><button class="btn pri" style="width:100%" data-a="hist-open" data-v="${esc(ownHist.manageToken)}" data-role="manage">${I.check} Bạn là trưởng nhóm đơn này — Vào quản lý</button></div>`;
+  }
   if (host) html += hostSummary();
   const isOther = c && c.docId!==S.uid;
   // own / editing cart
