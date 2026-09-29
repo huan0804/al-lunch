@@ -1455,6 +1455,11 @@ function watchSession(){
     S.fixedSessKey = await db.findSessionKeyByManageToken(window.SupabaseManageToken).catch(()=>null);
   } else if (window.SupabaseOrderToken){
     S.fixedSessKey = await db.findSessionKeyByOrderToken(window.SupabaseOrderToken).catch(()=>null);
+    // Máy này từng TẠO session này (xem lịch sử local) nhưng đang mở bằng
+    // link guest đã gửi cho nhóm (VD lỡ thoát/mất link ?manage=) => tự
+    // đưa thẳng về đúng link quản lý, không bắt tự tìm trong "Lịch sử đơn".
+    const ownHist = S.fixedSessKey && loadHistory().find(h=>h.sessionKey===S.fixedSessKey && h.role==="host" && h.manageToken);
+    if (ownHist){ location.replace(`${ARTIFACT_URL}?manage=${ownHist.manageToken}`); return; }
   } else {
     S.fixedSessKey = null; // link gốc: không session nào, luôn vào màn tạo đơn
   }
