@@ -1388,7 +1388,10 @@ async function onClick(e){
     case "row-ok": await setPay(v,{payStatus:"confirmed"}); break;
     case "row-undo": await setPay(v,{payStatus:"unpaid"}); break;
     case "row-del": { const o=S.orders[v]?.days?.[date]; if(!(await ask(`Xoá đơn của ${o?.name||"người này"}?`,"Xoá đơn",true))) return; try{ await mutateOrder(v,date,()=>null); toast("Đã xoá đơn"); }catch(err){ writeErr(err); } break; }
-    case "draft-del": { try{ await S.db.clearDrafting(S.sessKey, v); }catch(err){ writeErr(err); } break; }
+    case "draft-del": {
+      const nm = S.drafting?.[v]?.name;
+      if (!(await ask(`Xoá tín hiệu "${nm||"người này"} đang đặt"? Nếu họ vẫn đang chọn món, tín hiệu sẽ tự hiện lại sau vài giây.`,"Xoá",true))) return;
+      try{ await S.db.clearDrafting(S.sessKey, v); }catch(err){ writeErr(err); } break; }
     case "row-edit": { const o=S.orders[v]?.days?.[date]; if(!o) return; S.cart=newCart(v,o,v!==S.uid); window.scrollTo({top:0}); break; }
     case "proxy": S.cart=newCart("proxy-"+rid(), null, true); S.view="home"; toast("Chọn món cho người được đặt hộ"); window.scrollTo({top:0}); break;
     case "filter": S.filter=v; break;
