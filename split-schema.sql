@@ -29,6 +29,7 @@ create table if not exists split_events (
   recv jsonb not null default '{}'::jsonb,
   -- 'collect': đang thu thập khoản chi (người tham gia tự nhập khoản mình chi);
   -- 'settle': host đã chốt, hiện số tiền / QR / trạng thái thanh toán.
+  -- 'done': host đã hoàn tất sự kiện — chỉ xem lại, người tham gia không ghi được gì nữa.
   phase text not null default 'collect',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -36,9 +37,9 @@ create table if not exists split_events (
 alter table split_events add column if not exists phase text not null default 'collect';
 
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname='split_phase_ok') then
-    alter table split_events add constraint split_phase_ok check (phase in ('collect','settle'));
-  end if;
+  -- drop rồi add lại để thêm giá trị 'done' cho DB đã chạy bản cũ
+  alter table split_events drop constraint if exists split_phase_ok;
+  alter table split_events add constraint split_phase_ok check (phase in ('collect','settle','done'));
   if not exists (select 1 from pg_constraint where conname='split_data_size') then
     alter table split_events add constraint split_data_size check (pg_column_size(data) < 200000);
   end if;
@@ -107,15 +108,15 @@ begin
   return jsonb_build_object('updated_at', r.updated_at);
 end $$;
 
--- host chốt khoản chi ('settle') hoặc mở lại để thu thập tiếp ('collect')
+-- host chốt khoản chi ('settle'), hoàn tất sự kiện ('done') hoặc mở lại ('collect' / 'settle')
 create or replace function split_set_phase(p_token text, p_phase text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare r split_events;
 begin
-  if p_phase not in ('collect','settle') then raise exception 'invalid phase'; end if;
+  if p_phase not in ('collect','settle','done') then raise exception 'invalid phase'; end if;
   select * into r from split_events where manage_token = p_token for update;
   if not found then raise exception 'not found'; end if;
-  if p_phase = 'settle' and jsonb_array_length(coalesce(r.data->'expenses','[]'::jsonb)) = 0 then
+  if p_phase in ('settle','done') and jsonb_array_length(coalesce(r.data->'expenses','[]'::jsonb)) = 0 then
     raise exception 'no expenses';
   end if;
   update split_events set phase = p_phase, updated_at = now() where id = r.id;
@@ -235,7 +236,7 @@ begin
   select * into r from split_events where view_token = p_token for update;
   if not found then raise exception 'not found'; end if;
   if not split_person_exists(r.data, p_person) then raise exception 'unknown person'; end if;
-  if r.phase <> 'settle' then return jsonb_build_object('ok', false, 'reason', 'collecting'); end if;
+  if r.phase <> 'settle' then return jsonb_build_object('ok', false, 'reason', case when r.phase = 'done' then 'done' else 'collecting' end); end if;
   cur := r.status->p_person->>'s';
   -- người xem không được ghi đè trạng thái host đã chốt (đã nhận / đã chuyển)
   if cur in ('confirmed','sent') and (r.status->p_person->>'amt')::bigint = p_amount then
@@ -257,7 +258,7 @@ begin
   if not found then raise exception 'not found'; end if;
   if not split_person_exists(r.data, p_person) then raise exception 'unknown person'; end if;
   if not split_valid_bank(p_bank) then raise exception 'invalid bank'; end if;
-  if r.phase <> 'settle' then return jsonb_build_object('ok', false, 'reason', 'collecting'); end if;
+  if r.phase <> 'settle' then return jsonb_build_object('ok', false, 'reason', case when r.phase = 'done' then 'done' else 'collecting' end); end if;
   update split_events set recv = recv || jsonb_build_object(p_person, p_bank), updated_at = now() where id = r.id;
   return jsonb_build_object('ok', true);
 end $$;

@@ -284,7 +284,15 @@ function saveDraft(){
 }
 function clearEditDraft(){ try{ localStorage.removeItem(editKey()); }catch{} }
 function loadHist(){ try{ return JSON.parse(lsGet(HIST_KEY)||"[]"); }catch{ return []; } }
-function addHist(entry){ const h=loadHist().filter(x=>x.link!==entry.link); h.unshift(entry); lsSet(HIST_KEY, JSON.stringify(h.slice(0,30))); }
+const PHASE_LABEL = { collect:"Đang thu thập khoản chi", settle:"Đang chia tiền", done:"Đã hoàn tất" };
+function histMeta(e){ if (S.ev){ e.phase=S.phase; e.total=compute(S.ev).total; } return e; }
+function addHist(entry){ histMeta(entry); const h=loadHist().filter(x=>x.link!==entry.link); h.unshift(entry); lsSet(HIST_KEY, JSON.stringify(h.slice(0,30))); }
+// Cập nhật trạng thái / tổng tiền của sự kiện đã có trong lịch sử (không đổi thứ tự) để danh sách "lần chia tiền trước" luôn đúng.
+function touchHist(){
+  if (!S.ev || S.mode==="create") return;
+  const link = S.mode==="manage" ? manageLink() : viewLink(), h=loadHist(), e=h.find(x=>x.link===link);
+  if (!e) return; e.title=S.ev.title; histMeta(e); lsSet(HIST_KEY, JSON.stringify(h));
+}
 const viewLink = () => S.viewToken ? `${BASE}?view=${S.viewToken}` : "";
 const manageLink = () => S.mode==="manage" ? `${BASE}?manage=${S.token}` : "";
 
@@ -301,6 +309,7 @@ async function load(silent){
       else { S.ev=r.data; S.status=r.status||{}; S.recv=r.recv||{}; S.viewToken=S.token; S.updatedAt=r.updated_at; S.phase=r.phase||"collect";
         const me=lsGet("split:me:"+S.token); if (me && people().some(p=>p.id===me)) S.me=me; }
     }
+    touchHist();
   }catch(e){ console.error(e); if(!silent) toast("Không tải được dữ liệu, thử tải lại trang"); }
 }
 
@@ -390,7 +399,7 @@ function editView(){
   return `<div class="page">${topbar(creating?"Chia tiền nhóm":"Sửa khoản chi", ev.title||"Nhập người tham gia và các khoản đã chi", left)}
   <div class="pad">
     ${creating && hist.length ? `<details class="more" data-k="hist" ${S.open.hist?"open":""}><summary><span>${I.clock} Các lần chia tiền trước (${hist.length})</span>${I.chev}</summary>
-      ${hist.map(h=>`<a class="opt" href="${esc(h.link)}" style="text-decoration:none;color:inherit"><span class="t"><b>${esc(h.title)}</b><small>${new Date(h.at).toLocaleString("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"})}${h.role==="host"?", bạn là host":""}</small></span>${I.chev}</a>`).join("")}</details>` : ""}
+      ${hist.map(h=>`<a class="opt" href="${esc(h.link)}" style="text-decoration:none;color:inherit"><span class="t"><b>${esc(h.title)}</b><small>${new Date(h.at).toLocaleString("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"})}${h.role==="host"?", bạn là host":""}${h.phase?` · ${PHASE_LABEL[h.phase]||""}`:""}${h.total?` · ${money(h.total)}`:""}</small></span>${h.phase==="done"?`<span class="badge b-grn">Hoàn tất</span>`:""}${I.chev}</a>`).join("")}</details>` : ""}
     <div style="display:grid;gap:12px;margin-top:4px">
       <div><label class="f" for="ev-title">Tên sự kiện</label><input type="text" id="ev-title" data-f="title" value="${esc(ev.title)}" placeholder="VD: Team building Vũng Tàu" maxlength="60"></div>
       <div><label class="f" for="ev-host">Tên của bạn</label><input type="text" id="ev-host" data-f="host" value="${esc(host()?.name||"")}" placeholder="VD: Han" maxlength="40"></div>
@@ -468,12 +477,31 @@ function collectView(){
   <div class="bottom"><div class="in"><button class="cta" data-a="lock" ${ev.expenses.length&&!S.busy?"":"disabled"}>Chốt khoản chi và chia bill</button>${ev.expenses.length?"":`<div class="hint">Cần ít nhất 1 khoản chi</div>`}</div></div>
   </div>`;
 }
+/* ---------- Host: sự kiện đã hoàn tất (chỉ xem lại) ---------- */
+function doneView(){
+  const ev=S.ev, c=compute(ev), pay=c.rows.filter(r=>!r.isHost && r.net!==0);
+  return `<div class="page">${topbar(ev.title, `Đã hoàn tất, tổng chi ${money(c.total)}`, `<a class="icon" href="./" aria-label="Về trang chính">${I.bowl}</a>`, `<a class="pill" style="padding:8px 14px" href="./split.html">${I.plus} Chia tiền mới</a>`)}
+  <div class="pad">
+    <div class="note ok"><b>Sự kiện đã hoàn tất.</b> Bạn xem lại được ở đây bất cứ lúc nào, hoặc trong mục "Các lần chia tiền trước" ở trang chia tiền (trên trình duyệt này).</div>
+    <h2 class="sec" style="margin-top:20px">Kết quả thanh toán</h2>
+    ${pay.length ? pay.map(r=>{ const [l,cls]=badgeOf(r); return `<div class="bal"><div class="top"><b>${esc(r.name)}</b><span class="badge ${cls}">${l}</span></div><div class="sub num">${r.net<0?`Trả ${money(-r.net)} cho ${esc(host().name)}`:`Nhận lại ${money(r.net)} từ ${esc(host().name)}`}</div></div>`; }).join("") : `<p class="muted">Không ai cần trả hay nhận thêm.</p>`}
+    <div class="pills"><button class="pill" data-a="copy-summary">${I.link} Copy bảng tổng kết</button></div>
+  </div>
+  <div class="band"></div>
+  <div class="pad"><h2 class="sec">Cán cân cả nhóm</h2>${balanceList(c)}
+    <details class="more" data-k="exps" ${S.open.exps?"open":""} style="margin-top:8px"><summary><span>Các khoản chi (${ev.expenses.length})</span>${I.chev}</summary>${expenseList(null)}</details>
+  </div>
+  <div class="pad" style="text-align:center;margin-top:24px"><button class="link" data-a="reopen">Mở lại sự kiện</button><br><button class="link red" data-a="delete">Xoá lần chia tiền này</button></div>
+  </div>`;
+}
 function resultView(){
   if (S.phase==="collect") return collectView();
+  if (S.phase==="done") return doneView();
   const ev=S.ev, c=compute(ev), h=host();
   const owe=c.rows.filter(r=>!r.isHost && r.net<0), get=c.rows.filter(r=>!r.isHost && r.net>0);
   const collected=owe.filter(r=>stOf(r.id,r.net)==="confirmed").reduce((a,r)=>a-r.net,0);
   const refunded=get.filter(r=>stOf(r.id,r.net)==="sent").reduce((a,r)=>a+r.net,0);
+  const pending=owe.filter(r=>stOf(r.id,r.net)!=="confirmed").length+get.filter(r=>stOf(r.id,r.net)!=="sent").length;
   return `<div class="page">${topbar(ev.title, `${people().length} người, tổng chi ${money(c.total)}`, `<a class="icon" href="./" aria-label="Về trang chính">${I.bowl}</a>`, `<button class="pill" style="padding:8px 14px" data-a="share">${I.share} Gửi link</button>`)}
   <div class="pad">
     <div class="stats">
@@ -497,6 +525,10 @@ function resultView(){
       ${ev.expenses.map(e=>`<div class="exp" style="cursor:default"><div class="d"><b>${esc(e.title)}</b><small>${esc(nameOf(e.payerId))} chi, chia cho: ${esc((e.ids||[]).map(nameOf).join(", "))}</small></div><span class="p num">${money(e.amount)}</span></div>`).join("")}
     </details>
   </div>
+  <div class="band"></div>
+  <div class="pad"><div class="note ${pending?"":"ok"}">${pending?`Còn <b>${pending}</b> người chưa hoàn tất thanh toán.`:"<b>Mọi người đã thanh toán xong.</b>"}</div>
+    <button class="cta" data-a="finish" style="margin-top:12px">Hoàn tất sự kiện</button>
+    <p class="small muted" style="text-align:center;margin:8px 0 0">Hoàn tất rồi vẫn xem lại được, và mở lại được nếu cần.</p></div>
   <div class="pad" style="text-align:center;margin-top:24px"><button class="link" data-a="unlock">Mở lại để thu thập thêm khoản chi</button><br><button class="link red" data-a="delete">Xoá lần chia tiền này</button></div>
   </div>`;
 }
@@ -583,7 +615,14 @@ function guestView(){
          ${acc && !S.recvForm ? `<p class="small">Đã gửi tài khoản <b>${esc(acc.bankName||"")} ••••${esc(acc.last4||"")}</b>. ${esc(h.name)} sẽ quét QR để chuyển cho bạn. <button class="link" data-a="recv-edit" data-v="${esc(r.id)}" style="font-size:14px">Sửa</button></p>`
            : S.recvForm ? `<h3 style="margin:16px 0 0;font-size:17px">Tài khoản nhận tiền của bạn</h3>${recvFormHtml("gf")}` : `<button class="btn pri" data-a="recv-edit" data-v="${esc(r.id)}" style="margin-top:12px">Gửi số tài khoản để nhận tiền</button>`}`;
   } else block = `<div class="note ok"><b>Bạn không cần trả thêm và cũng không nhận lại.</b></div>`;
-  const bar = r.net<0 && s==="unpaid" ? `<div class="bottom"><div class="in"><button class="cta" data-a="claim" ${S.busy?"disabled":""}>Tôi đã chuyển khoản ${money(-r.net)}</button></div></div>` : "";
+  const done = S.phase==="done";
+  if (done){
+    const settled = r.net===0 || (r.net<0 ? s==="confirmed" : s==="sent");
+    block = `<div class="note ok"><b>Sự kiện đã hoàn tất.</b></div>` + (r.net===0 ? "" : settled
+      ? `<div class="note ok" style="margin-top:10px">${r.net<0?`${esc(h.name)} đã nhận ${money(-r.net)} của bạn.`:`${esc(h.name)} đã chuyển lại ${money(r.net)} cho bạn.`}</div>`
+      : `<div class="note" style="margin-top:10px">${r.net<0?`Khoản ${money(-r.net)} bạn cần trả chưa được ghi nhận.`:`Khoản ${money(r.net)} bạn được nhận lại chưa được ghi nhận.`} Nếu đã xong, hãy báo ${esc(h.name)}.</div>`);
+  }
+  const bar = !done && r.net<0 && s==="unpaid" ? `<div class="bottom"><div class="in"><button class="cta" data-a="claim" ${S.busy?"disabled":""}>Tôi đã chuyển khoản ${money(-r.net)}</button></div></div>` : "";
   return `<div class="page">${head}<div class="pad">
     <div class="person"><div class="head"><span class="avatar">${esc(r.name.trim()[0]||"?")}</span><div class="nm">${esc(r.name)}<div class="small muted num" style="font-weight:500">Đã chi ${money(r.paid)}, phần của bạn ${money(r.share)}</div></div><span class="badge ${badgeOf(r)[1]}">${badgeOf(r)[0]}</span></div>
       <div style="margin-top:12px">${block}</div></div>
@@ -714,6 +753,15 @@ async function onClick(e){
       if (!(await ask("Chốt khoản chi và bắt đầu chia bill? Người tham gia sẽ không thêm khoản chi được nữa (bạn mở lại được).","Chốt khoản chi"))) return;
       try{ await rpc("split_set_phase",{p_token:S.token, p_phase:"settle"}); await load(true); S.sheet={kind:"share"}; toast("Đã chốt. Gửi link để mọi người xem số tiền"); }
       catch(err){ console.error(err); toast("Không chốt được, thử lại"); } break;
+    case "finish": {
+      const c2=compute(S.ev), pend=c2.rows.filter(r=>!r.isHost && r.net!==0 && stOf(r.id,r.net)!==(r.net<0?"confirmed":"sent")).length;
+      if (!(await ask(pend ? `Còn ${pend} người chưa được ghi nhận thanh toán. Vẫn hoàn tất sự kiện? Mọi người chỉ còn xem lại được.` : "Hoàn tất sự kiện? Mọi người chỉ còn xem lại được, bạn mở lại được nếu cần.","Hoàn tất"))) return;
+      try{ await rpc("split_set_phase",{p_token:S.token, p_phase:"done"}); await load(true); window.scrollTo({top:0}); toast("Đã hoàn tất sự kiện"); }
+      catch(err){ console.error(err); toast("Không hoàn tất được, thử lại"); } break; }
+    case "reopen":
+      if (!(await ask("Mở lại sự kiện để tiếp tục ghi nhận thanh toán?","Mở lại"))) return;
+      try{ await rpc("split_set_phase",{p_token:S.token, p_phase:"settle"}); await load(true); window.scrollTo({top:0}); toast("Đã mở lại sự kiện"); }
+      catch(err){ console.error(err); toast("Không mở lại được, thử lại"); } break;
     case "unlock":
       if (!(await ask("Mở lại để thu thập thêm khoản chi? Màn thanh toán sẽ tạm ẩn với người tham gia. Trạng thái đã đánh dấu giữ nguyên nếu số tiền không đổi.","Mở lại"))) return;
       try{ await rpc("split_set_phase",{p_token:S.token, p_phase:"collect"}); await load(true); S.view="result"; toast("Đã mở lại thu thập khoản chi"); }
@@ -730,7 +778,7 @@ async function onClick(e){
       S.busy=true; render();
       try{
         if (S.mode==="manage") await rpc("split_set_recv_manage",{p_token:S.token, p_person:f.pid, p_bank:bank});
-        else await rpc("split_set_recv",{p_token:S.token, p_person:f.pid, p_bank:bank});
+        else { const res=await rpc("split_set_recv",{p_token:S.token, p_person:f.pid, p_bank:bank}); if (res?.ok===false){ S.recvForm=null; await load(true); S.busy=false; toast(res.reason==="done"?"Sự kiện đã hoàn tất":"Host chưa chốt khoản chi"); render(); return; } }
         S.recvForm=null; await load(true); toast(S.mode==="manage"?"Đã lưu tài khoản":"Đã gửi số tài khoản cho host");
       }catch(err){ console.error(err); toast("Không lưu được tài khoản"); }
       S.busy=false; break; }
@@ -743,7 +791,7 @@ async function onClick(e){
     case "claim": case "unclaim": {
       const r=rowOf(S.me); if(!r) return;
       S.busy=true; render();
-      try{ const res=await rpc("split_claim",{p_token:S.token, p_person:S.me, p_amount:-r.net, p_claim:a==="claim"}); if(res?.ok===false) toast("Host đã xác nhận rồi"); else toast(a==="claim"?"Đã báo host":"Đã huỷ báo chuyển"); await load(true); }
+      try{ const res=await rpc("split_claim",{p_token:S.token, p_person:S.me, p_amount:-r.net, p_claim:a==="claim"}); if(res?.ok===false) toast(res.reason==="done" ? "Sự kiện đã hoàn tất" : res.reason==="collecting" ? "Host chưa chốt khoản chi" : "Host đã xác nhận rồi"); else toast(a==="claim"?"Đã báo host":"Đã huỷ báo chuyển"); await load(true); }
       catch(err){ console.error(err); toast("Không lưu được, thử lại"); }
       S.busy=false; break; }
     default: return;
@@ -801,7 +849,19 @@ window.addEventListener("beforeunload", e=>{ if (S.mode==="manage" && S.dirty){ 
     await load(); S.view = "result";
     if (S.mode==="view" && !S.notFound){
       // Máy này đã tạo sự kiện này (host) mà lại mở link xem → đưa thẳng về link quản lý.
-      const own = loadHist().find(h=>h.role==="host" && h.viewToken===S.token && h.link);
+      let own = loadHist().find(h=>h.role==="host" && h.viewToken===S.token && h.link);
+      if (!own){
+        // Sự kiện tạo từ bản cũ chưa lưu viewToken: hỏi server từng link quản lý đã lưu để tìm và bù lại.
+        const old = loadHist().filter(h=>h.role==="host" && !h.viewToken && /[?&]manage=([^&]+)/.test(h.link||"")).slice(0,10);
+        for (const h of old){
+          try{
+            const r = await rpc("split_get_manage",{p_token:/[?&]manage=([^&]+)/.exec(h.link)[1]});
+            if (!r) continue;
+            const all=loadHist(), e=all.find(x=>x.link===h.link); if (e){ e.viewToken=r.view_token; lsSet(HIST_KEY, JSON.stringify(all)); }
+            if (r.view_token===S.token){ own=h; break; }
+          }catch{}
+        }
+      }
       if (own){ location.replace(own.link); return; }
     }
     if (S.mode==="manage" && S.ev){
