@@ -61,17 +61,18 @@ input:focus,select:focus{border-color:var(--brand)}
 .cta{width:100%;border:0;border-radius:999px;background:var(--brand);color:var(--brand-ink);font-weight:700;font-size:17px;padding:16px 20px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
 .cta.split{justify-content:space-between}
 .cta[disabled]{background:var(--gray-soft);color:var(--muted);cursor:not-allowed}
-.ctarow{display:grid;grid-template-columns:1fr;gap:8px}
-.ctarow .cta,.ctarow .cta{transition:background .15s,border-color .15s,filter .15s}
+.cta{transition:background .15s,border-color .15s,filter .15s}
 .cta:not([disabled]):hover{filter:brightness(.93)}
-.cta.ghost:not([disabled]):hover{filter:none;background:var(--brand-soft);border-color:var(--brand)}
 .cta:not([disabled]):active{filter:brightness(.88)}
-.cta.ghost{margin-top:0;padding:8px 16px;font-size:15px;line-height:1.25;border-radius:14px}
+.cta.ghost{background:var(--surface);border:1.5px solid var(--line);margin-top:10px}
+.cta.ghost:not([disabled]):hover{filter:none;background:var(--brand-soft);border-color:var(--brand)}
+/* hai nút ở form tạo sự kiện: cùng khung bo vuông, cùng màu cam, rê chuột thì trắng viền cam */
+.ctarow{display:grid;grid-template-columns:1fr;gap:8px}
+.ctarow .cta,.ctarow .cta.ghost{margin-top:0;padding:8px 16px;font-size:15px;line-height:1.25;border-radius:14px}
 .ctarow .cta.ghost:not([disabled]){background:var(--brand);border:0;color:var(--brand-ink)}
 .ctarow .cta:not([disabled]):hover,.ctarow .cta.ghost:not([disabled]):hover{filter:none;background:#fff;box-shadow:inset 0 0 0 2px var(--brand)}
-.ctarow .cta:not([disabled]):active{background:var(--brand-soft)}
+.ctarow .cta:not([disabled]):active,.ctarow .cta.ghost:not([disabled]):active{filter:none;background:var(--brand-soft)}
 .ctarow .cta small{font-size:11.5px!important;margin-top:1px}
-.cta.ghost{background:var(--surface);border:1.5px solid var(--line);margin-top:10px}
 .hint{text-align:center;font-size:13px;color:var(--chili);margin-top:8px}
 .badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;white-space:nowrap}
 .b-red{background:var(--chili-soft);color:var(--chili)} .b-yel{background:var(--yel-soft);color:var(--ink)}
