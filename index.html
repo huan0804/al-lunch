@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Cơm trưa team</title>
+<title>AL Lunch</title>
+<meta property="og:title" content="AL Lunch">
+<meta property="og:site_name" content="AL Lunch">
+<meta property="og:description" content="Đặt cơm trưa nhóm và chia tiền nhóm">
+<meta name="description" content="Đặt cơm trưa nhóm và chia tiền nhóm">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -763,7 +767,7 @@ function syncDrafting(){
 // Link gốc: màn chọn chức năng (đặt cơm trưa / chia tiền nhóm). Chỉ hiện khi
 // không có ?manage= / ?order=; chọn "Đặt cơm trưa" thì S.picked=true và vào màn tạo đơn như cũ.
 function launcherView(){
-  return `<div class="launch"><h1>Cơm trưa team</h1><p class="sub">Bạn muốn làm gì?</p>
+  return `<div class="launch"><h1>AL Lunch</h1><p class="sub">Bạn muốn làm gì?</p>
     <button class="lcard" data-a="pick-lunch"><span class="ic">🍱</span><span><b>Đặt cơm trưa</b><small>Tạo đơn nhóm, mời đồng nghiệp chọn món và thanh toán</small></span></button>
     <a class="lcard" href="./split.html"><span class="ic">💸</span><span><b>Chia tiền nhóm</b><small>Chia chi phí chung (team building, ăn tối…), ai trả ai nhận lại bao nhiêu</small></span></a></div>`;
 }
