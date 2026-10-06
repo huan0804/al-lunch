@@ -491,7 +491,7 @@ function doneView(){
   <div class="pad"><h2 class="sec">Cán cân cả nhóm</h2>${balanceList(c)}
     <details class="more" data-k="exps" ${S.open.exps?"open":""} style="margin-top:8px"><summary><span>Các khoản chi (${ev.expenses.length})</span>${I.chev}</summary>${expenseList(null)}</details>
   </div>
-  <div class="pad" style="text-align:center;margin-top:24px"><button class="link" data-a="reopen">Mở lại sự kiện</button><br><button class="link red" data-a="delete">Xoá lần chia tiền này</button></div>
+  <div class="pad" style="text-align:center;margin-top:24px"><a class="cta" href="./split.html" style="text-decoration:none">${I.plus} Tạo chia tiền mới</a><br><button class="link" data-a="reopen">Mở lại sự kiện</button></div>
   </div>`;
 }
 function resultView(){
