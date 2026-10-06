@@ -276,7 +276,13 @@ const refundNote = title => ascii("Hoan tien "+title).slice(0,25);
 
 /* ================= Lưu / tải ================= */
 const DRAFT_KEY="split:draft", HIST_KEY="split:history";
-function saveDraft(){ if (S.mode==="create") lsSet(DRAFT_KEY, JSON.stringify(S.ev)); }
+// Bản nháp đang sửa dở: lưu theo từng sự kiện để refresh không mất (host đang ở link ?manage=).
+const editKey = () => "split:edit:"+S.token;
+function saveDraft(){
+  if (S.mode==="create") lsSet(DRAFT_KEY, JSON.stringify(S.ev));
+  else if (S.mode==="manage" && S.dirty) lsSet(editKey(), JSON.stringify(S.ev));
+}
+function clearEditDraft(){ try{ localStorage.removeItem(editKey()); }catch{} }
 function loadHist(){ try{ return JSON.parse(lsGet(HIST_KEY)||"[]"); }catch{ return []; } }
 function addHist(entry){ const h=loadHist().filter(x=>x.link!==entry.link); h.unshift(entry); lsSet(HIST_KEY, JSON.stringify(h.slice(0,30))); }
 const viewLink = () => S.viewToken ? `${BASE}?view=${S.viewToken}` : "";
@@ -346,7 +352,8 @@ async function saveEvent(){
       S.ev=out; S.baseAt=saved.updated_at; S.baseIds=out.expenses.map(x=>x.id); S.dirty=false; S.view="result";
       toast(merged ? `Đã lưu, gộp thêm ${merged} khoản chi mới của người khác` : "Đã lưu thay đổi");
     }
-    addHist({ title:ev.title, at:Date.now(), role:"host", link:manageLink() });
+    clearEditDraft();
+    addHist({ title:ev.title, at:Date.now(), role:"host", link:manageLink(), viewToken:S.viewToken });
   }catch(e){ console.error(e); toast("Không lưu được, thử lại sau ít giây"); }
   S.busy=false; render(); window.scrollTo({top:0});
 }
@@ -665,7 +672,7 @@ async function onClick(e){
     case "to-edit": S.view="edit"; window.scrollTo({top:0}); break;
     case "to-result":
       if (S.dirty && !(await ask("Bỏ các thay đổi chưa lưu?","Bỏ thay đổi",true))) return;
-      if (S.dirty){ S.dirty=false; await load(true); }
+      if (S.dirty){ S.dirty=false; clearEditDraft(); await load(true); }
       S.view="result"; window.scrollTo({top:0}); break;
     case "save": saveEvent(); return;
     case "add-person": addPeople(S.newName); S.newName=""; break;
@@ -792,6 +799,20 @@ window.addEventListener("beforeunload", e=>{ if (S.mode==="manage" && S.dirty){ 
     S.view="edit";
   } else {
     await load(); S.view = "result";
+    if (S.mode==="view" && !S.notFound){
+      // Máy này đã tạo sự kiện này (host) mà lại mở link xem → đưa thẳng về link quản lý.
+      const own = loadHist().find(h=>h.role==="host" && h.viewToken===S.token && h.link);
+      if (own){ location.replace(own.link); return; }
+    }
+    if (S.mode==="manage" && S.ev){
+      // Ghi nhớ sự kiện này trong lịch sử (kèm view token) để lần sau mở link xem trên máy này tự chuyển về đây.
+      addHist({ title:S.ev.title, at:Date.now(), role:"host", link:manageLink(), viewToken:S.viewToken });
+      // Khôi phục phần đang sửa dở nếu host refresh giữa chừng.
+      try{
+        const d=JSON.parse(lsGet(editKey())||"null");
+        if (d?.people && d?.expenses){ S.ev=d; S.dirty=true; S.view="edit"; }
+      }catch{}
+    }
   }
   S.loaded=true; render();
   // cập nhật trạng thái thanh toán / tài khoản người khác vừa gửi, không cần realtime

@@ -80,6 +80,7 @@ Standalone page for splitting shared event costs, linked from the root launcher 
 - Settlement goes through the host as a hub: each non-host person's `net = paid − share`; `net < 0` → pays `|net|` to the host's account via VietQR; `net > 0` → host refunds `net` to that person's account (they submit it via the view link, or host enters it). Each expense is split evenly in whole đồng; leftover đồng go to the first participants so shares always sum to the expense amount.
 - Payment status entries store the amount they were set for (`{s, amt}`); the client ignores a status whose `amt` no longer matches the person's current balance, so editing expenses automatically resets stale "paid" marks.
 - No realtime: the manage/view pages poll `split_get_*` every 10s while visible (and pause while editing).
+- Host recovery (mirrors the lunch app): `split:history` host entries store `viewToken`, so opening `?view=` on a browser that owns the event `location.replace`s to its `?manage=` link; the history entry is (re)written whenever a manage link loads. Unsaved edits on a manage link are kept in `split:edit:<manage_token>` and restored (view=edit, dirty) after refresh.
 - Local storage: `split:draft` (unsaved create form), `split:history` (events opened on this browser), and it reuses `comtrua:lastBank` / `comtrua:name` from the lunch app for prefill.
 
 ## Hard constraints / conventions carried over from the Claude Artifact era
