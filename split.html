@@ -377,7 +377,8 @@ function editView(){
   const b=ev.bank, known=BANKS.some(x=>x[1]===b.bankBin);
   const bankLine = b.accountNo ? `${esc(b.bankName||"")} ${esc(String(b.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
   const hist = creating ? loadHist() : [];
-  const err=validateEvent(ev);
+  const pend=S.newName.trim();
+  const err = pend ? `Bạn đã gõ "${pend.length>20?pend.slice(0,20)+"…":pend}" nhưng chưa bấm Thêm` : validateEvent(ev);
   const pp=people();
   return `<div class="page">${topbar(creating?"Chia tiền nhóm":"Sửa khoản chi", ev.title||"Nhập người tham gia và các khoản đã chi", left)}
   <div class="pad">
@@ -404,6 +405,7 @@ function editView(){
     <p class="small muted" style="margin:0 0 10px">Bạn là host, luôn có trong danh sách. Bấm × để bỏ một người.</p>
     <div class="chips">${pp.map(p=>`<span class="chip ${p.isHost?"host":""}">${esc(displayName(p))}${p.isHost?"":`<button data-a="del-person" data-v="${esc(p.id)}" aria-label="Bỏ ${esc(p.name)}">${I.close}</button>`}</span>`).join("")}${p_pad(pp)}</div>
     <div class="addrow"><input type="text" id="new-name" data-f="new-name" value="${esc(S.newName)}" placeholder="Nhập tên, có thể dán nhiều tên cách nhau bởi dấu phẩy" maxlength="400" enterkeyhint="done"><button class="btn pri" data-a="add-person">Thêm</button></div>
+    ${pend?`<div class="note" role="alert" style="margin-top:10px;border-color:var(--brand);background:var(--brand-soft)">Bạn đã gõ <b>${esc(pend)}</b> nhưng chưa thêm vào danh sách. Bấm nút <b>Thêm</b> (hoặc Enter) để lưu tên này.</div>`:""}
   </div>
   <div class="band"></div>
   <div class="pad">
@@ -411,7 +413,7 @@ function editView(){
     ${ev.expenses.length ? ev.expenses.map((e,i)=>{ const n=(e.ids||[]).length; return `<button class="exp" data-a="edit-exp" data-i="${i}"><div class="d"><b>${esc(e.title)}</b><small>${esc(nameOf(e.payerId))} đã chi, chia ${n===pp.length?"cả nhóm":n+" người"}${n?`, mỗi người khoảng ${money(Math.round(e.amount/n))}`:""}</small></div><span class="p num">${money(e.amount)}</span></button>`; }).join("")
       : `<p class="muted">Chưa có khoản chi nào. Ví dụ: tiền phòng, tiền xe, ăn tối… Nhập khoản bạn đã chi; người khác sẽ tự nhập khoản của họ qua link bạn gửi sau khi tạo.</p>`}
     <button class="btn" data-a="new-exp" style="margin-top:10px" ${pp.length<2?"disabled":""}>${I.plus} Thêm khoản chi</button>
-    ${pp.length<2?`<p class="small muted">Thêm người tham gia trước khi nhập khoản chi.</p>`:""}
+    ${pp.length<2?`<p class="small ${pend?"err":"muted"}">${pend?"Bấm Thêm để đưa tên vừa gõ vào danh sách, rồi mới nhập được khoản chi.":"Thêm người tham gia trước khi nhập khoản chi."}</p>`:""}
   </div>
   ${ev.expenses.length ? `<div class="band"></div><div class="pad"><h2 class="sec">Kết quả tạm tính</h2>${balanceList(c)}</div>` : ""}
   <div class="bottom"><div class="in"><button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${creating?"Tạo và gửi cho mọi người":"Lưu thay đổi"}</button>${err?`<div class="hint">${esc(err)}</div>`:""}</div></div>
@@ -760,7 +762,7 @@ function onInput(e){
     case "b-acc": ev.bank.accountNo=t.value; markDirty(); break;
     case "b-name": ev.bank.accountName=t.value; markDirty(); return;
     case "b-bin": ev.bank.bankBin=t.value.trim(); markDirty(); break;
-    case "new-name": S.newName=t.value; return;
+    case "new-name": { const was=!!S.newName.trim(); S.newName=t.value; if (was===!!t.value.trim()) return; break; }
     case "x-title": S.sheet.title=t.value; break;
     case "x-amt": S.sheet.amount=t.value; break;
     case "rf-acc": S.recvForm.accountNo=t.value; return;
