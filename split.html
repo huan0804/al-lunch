@@ -25,7 +25,7 @@ html,body{background:#FFFFFF}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
 .num{font-variant-numeric:tabular-nums}
-.page{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:130px}
+.page{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:210px}
 .pad{padding:0 20px}
 .band{height:1px;background:var(--line);margin:20px 0}
 .muted{color:var(--muted)} .small{font-size:14px} .err{color:var(--chili)}
@@ -328,7 +328,7 @@ function cleanEvent(ev){
   e.people=e.people.map(p=>({ ...p, name:p.name.trim() }));
   return e;
 }
-async function saveEvent(){
+async function saveEvent(lock){
   const err=validateEvent(S.ev); if (err){ toast(err); return; }
   const ev=cleanEvent(S.ev);
   S.busy=true; render();
@@ -342,6 +342,11 @@ async function saveEvent(){
       try{ localStorage.removeItem(DRAFT_KEY); }catch{}
       S.view="result"; S.sheet={kind:"share"};
       toast("Đã tạo. Gửi link cho mọi người nhé");
+      if (lock){
+        // Lựa chọn "Chốt bill ngay": host đã nhập đủ khoản chi, bỏ qua bước thu thập.
+        try{ await rpc("split_set_phase",{p_token:S.token, p_phase:"settle"}); S.phase="settle"; toast("Đã chốt bill. Gửi link để mọi người xem số tiền"); }
+        catch(e2){ console.error(e2); toast("Đã tạo nhưng chưa chốt được, bấm \"Chốt khoản chi\" ở màn tiếp theo"); }
+      }
     } else {
       // Người khác có thể vừa thêm khoản chi trong lúc host đang sửa: gộp các khoản mới đó vào rồi lưu lại.
       let out=ev, base=S.baseAt, merged=0, saved=null;
@@ -432,7 +437,11 @@ function editView(){
     ${pp.length<2?`<p class="small ${pend?"err":"muted"}">${pend?"Bấm Thêm để đưa tên vừa gõ vào danh sách, rồi mới nhập được khoản chi.":"Thêm người tham gia trước khi nhập khoản chi."}</p>`:""}
   </div>
   ${ev.expenses.length ? `<div class="band"></div><div class="pad"><h2 class="sec">Kết quả tạm tính</h2>${balanceList(c)}</div>` : ""}
-  <div class="bottom"><div class="in"><button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} ${creating?"Tạo và gửi cho mọi người":"Lưu thay đổi"}</button>${err?`<div class="hint">${esc(err)}</div>`:""}</div></div>
+  <div class="bottom"><div class="in">${creating ? `
+    <button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""}<span style="text-align:center">1. Cho người khác thêm khoản chi${"<small style=\"display:block;font-weight:500;font-size:12px;opacity:.8\">Tạo và gửi link, mọi người tự nhập khoản mình đã chi</small>"}</span></button>
+    <button class="cta ghost" data-a="save" data-lock="1" ${err||S.busy||!ev.expenses.length?"disabled":""}><span style="text-align:center">2. Chốt toàn bộ bill và chia tiền${"<small style=\"display:block;font-weight:500;font-size:12px;opacity:.8\">Dùng khi bạn đã nhập đủ mọi khoản chi</small>"}</span></button>
+    ${err?`<div class="hint">${esc(err)}</div>`:!ev.expenses.length?`<div class="hint" style="color:var(--muted)">Cần ít nhất 1 khoản chi để chốt bill ngay</div>`:""}`
+  : `<button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} Lưu thay đổi</button>${err?`<div class="hint">${esc(err)}</div>`:""}`}</div></div>
   </div>`;
 }
 function p_pad(pp){ return pp.length<2 ? `<span class="small muted" style="align-self:center">Chưa có ai khác</span>` : ""; }
@@ -713,7 +722,7 @@ async function onClick(e){
       if (S.dirty && !(await ask("Bỏ các thay đổi chưa lưu?","Bỏ thay đổi",true))) return;
       if (S.dirty){ S.dirty=false; clearEditDraft(); await load(true); }
       S.view="result"; window.scrollTo({top:0}); break;
-    case "save": saveEvent(); return;
+    case "save": saveEvent(b.dataset.lock==="1"); return;
     case "add-person": addPeople(S.newName); S.newName=""; break;
     case "del-person": {
       const used=S.ev.expenses.find(x=>x.payerId===v);
