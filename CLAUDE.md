@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-"Cơm trưa team" — a team lunch-ordering app for splitting a shared lunch order and collecting payment (cash or VietQR bank transfer). It runs as a static site on **Vercel + Supabase** (no build step, no bundler, no framework — plain HTML/CSS/JS served as-is), deployed at https://al-lunch.vercel.app/. Repo: https://github.com/huan0804/al-lunch.
+"AL Lunch" — a team lunch-ordering app for splitting a shared lunch order and collecting payment (cash or VietQR bank transfer). It runs as a static site on **Vercel + Supabase** (no build step, no bundler, no framework — plain HTML/CSS/JS served as-is), deployed at https://al-lunch.vercel.app/. Repo: https://github.com/huan0804/al-lunch.
 
 Read both of these before making non-trivial changes — they are the authoritative specs and disagree with each other in places (see below):
 - [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) — original product/business spec (Vietnamese), written for the old Claude Artifact version. Pricing formula, "đặt hộ" (order-on-behalf-of) flow, and VietQR payload details are still accurate. Its "Mô hình dữ liệu" (§4) and "Vai trò" (§2) sections are **obsolete** — permissions and data model were redesigned for Supabase (see below).
