@@ -25,7 +25,7 @@ html,body{background:#FFFFFF}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
 .num{font-variant-numeric:tabular-nums}
-.page{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:210px}
+.page{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:170px}
 .pad{padding:0 20px}
 .band{height:1px;background:var(--line);margin:20px 0}
 .muted{color:var(--muted)} .small{font-size:14px} .err{color:var(--chili)}
@@ -61,6 +61,9 @@ input:focus,select:focus{border-color:var(--brand)}
 .cta{width:100%;border:0;border-radius:999px;background:var(--brand);color:var(--brand-ink);font-weight:700;font-size:17px;padding:16px 20px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
 .cta.split{justify-content:space-between}
 .cta[disabled]{background:var(--gray-soft);color:var(--muted);cursor:not-allowed}
+.ctarow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ctarow .cta,.ctarow .cta.ghost{margin-top:0;padding:11px 12px;font-size:15px;line-height:1.25;border-radius:16px}
+@media (max-width:430px){.ctarow{grid-template-columns:1fr}.ctarow .cta,.ctarow .cta.ghost{padding:10px 14px}}
 .cta.ghost{background:var(--surface);border:1.5px solid var(--line);margin-top:10px}
 .hint{text-align:center;font-size:13px;color:var(--chili);margin-top:8px}
 .badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;white-space:nowrap}
@@ -437,9 +440,9 @@ function editView(){
     ${pp.length<2?`<p class="small ${pend?"err":"muted"}">${pend?"Bấm Thêm để đưa tên vừa gõ vào danh sách, rồi mới nhập được khoản chi.":"Thêm người tham gia trước khi nhập khoản chi."}</p>`:""}
   </div>
   ${ev.expenses.length ? `<div class="band"></div><div class="pad"><h2 class="sec">Kết quả tạm tính</h2>${balanceList(c)}</div>` : ""}
-  <div class="bottom"><div class="in">${creating ? `
-    <button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""}<span style="text-align:center">1. Cho người khác thêm khoản chi${"<small style=\"display:block;font-weight:500;font-size:12px;opacity:.8\">Tạo và gửi link, mọi người tự nhập khoản mình đã chi</small>"}</span></button>
-    <button class="cta ghost" data-a="save" data-lock="1" ${err||S.busy||!ev.expenses.length?"disabled":""}><span style="text-align:center">2. Chốt toàn bộ bill và chia tiền${"<small style=\"display:block;font-weight:500;font-size:12px;opacity:.8\">Dùng khi bạn đã nhập đủ mọi khoản chi</small>"}</span></button>
+  <div class="bottom"><div class="in">${creating ? `<div class="ctarow">
+    <button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""}<span style="text-align:center">1. Cho người khác thêm khoản chi<small style="display:block;font-weight:500;font-size:12px;opacity:.8">Tạo và gửi link, mọi người tự nhập khoản mình đã chi</small></span></button>
+    <button class="cta ghost" data-a="save" data-lock="1" ${err||S.busy||!ev.expenses.length?"disabled":""}><span style="text-align:center">2. Chốt toàn bộ bill và chia tiền<small style="display:block;font-weight:500;font-size:12px;opacity:.8">Dùng khi bạn đã nhập đủ mọi khoản chi</small></span></button></div>
     ${err?`<div class="hint">${esc(err)}</div>`:!ev.expenses.length?`<div class="hint" style="color:var(--muted)">Cần ít nhất 1 khoản chi để chốt bill ngay</div>`:""}`
   : `<button class="cta" data-a="save" ${err||S.busy?"disabled":""}>${S.busy?'<span class="spin"></span>':""} Lưu thay đổi</button>${err?`<div class="hint">${esc(err)}</div>`:""}`}</div></div>
   </div>`;
