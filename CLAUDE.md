@@ -16,6 +16,7 @@ Files:
 - `supabase-adapter.js` — shim that reimplements the old Claude-Artifact-style `db`/`user`/`sample` API (`doc()`, `collection()`, `onSnapshot`, `mutateOrder`) on top of Supabase, so `index.html`'s event/render logic barely changed during migration.
 - `supabase-config.js` — `window.SUPABASE_URL` / `SUPABASE_ANON_KEY` (anon/publishable key, safe to expose — see security notes in `supabase-schema.sql`) and the share-link origin.
 - `supabase-schema.sql` — full schema, RLS policies, and RPCs. Idempotent (`IF NOT EXISTS` / `CREATE OR REPLACE` throughout) — safe to re-run wholesale in the Supabase SQL Editor after edits.
+- `split.html` + `split-schema.sql` — the standalone "Chia tiền nhóm" (split bill) feature; see the Split bill section below. `split-bill-feature.md` is the original change spec for it (historical).
 - `com-trua.html` + `mock-runtime.js` — the **old Claude Artifact version**, kept only as historical reference. `mock-runtime.js` fakes `window.claude.use(...)` and only works against `com-trua.html`, not `index.html`. Not actively maintained; do not edit them expecting user-visible effect.
 
 ## Running / testing locally
@@ -42,7 +43,7 @@ Multiple sessions exist in parallel, each independently owned by whoever created
 Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) live on the **session**, not on `config` — each session creator receives payment into their own account, entered inline when creating the session (autofilled from that browser's `localStorage`, never shows another user's account).
 
 **State & rendering (`index.html`)**
-- All app state lives in a single object `S` (~line 284: `view`, `sheet`, `cart`, `md`, `sf`, `ai`, `libQ`, `filter`, `busy`, `open`, plus Supabase-specific `db`, `uid`, `canEdit`, `isOwner`, `config`, `session`, `orders`, `dishes`).
+- All app state lives in a single object `S` (~line 300: `view`, `sheet`, `cart`, `md`, `sf`, `ai`, `libQ`, `filter`, `busy`, `open`, plus Supabase-specific `db`, `uid`, `canEdit`, `isOwner`, `config`, `session`, `orders`, `dishes`, `drafting`).
 - `render()` redraws the entire `#app` and `#overlay` (bottom-sheet) on every state change, while preserving focus and cursor position of the currently-focused input.
 - Events use delegation via `data-a` (action) and `data-f` (field) attributes — there are no inline `addEventListener` calls scattered through the view functions.
 - `S.cart` is a draft order; it is only written to the db when the user confirms ("Xác nhận đặt món").
@@ -53,8 +54,14 @@ Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) liv
 - Field names are translated between camelCase (app) and snake_case (DB) via `CONFIG_MAP`/`SESSION_MAP`/`ORDER_MAP` in `supabase-adapter.js` — when adding a field, add it to the relevant map *and* to `supabase-schema.sql`.
 - Orders are written via `mutateOrder(docId, sessionKey, fn)`, a read-modify-upsert-whole-row pattern, mapped onto the `orders` table's `(session_key, doc_id)` composite primary key.
 - `doc_id` for a normal member is a per-browser anonymous UUID persisted in `localStorage` (`comtrua:uid`), not a real auth identity. Host detection (`user.canEdit()`/`isOwner()`) is `true` only when the current `?manage=` token resolves to an existing session (verified once via `SupabaseResolveManageAccess()` during boot, before any `canEdit()`/`isOwner()` call).
-- Realtime updates use Supabase Realtime (`postgres_changes` subscriptions) instead of Firestore's `onSnapshot`; all four tables (`config`, `sessions`, `orders`, `dishes`) must stay in the `supabase_realtime` publication (see the `do $$ ... $$` block in the schema) or a given screen won't live-update.
+- Realtime updates use Supabase Realtime (`postgres_changes` subscriptions) instead of Firestore's `onSnapshot`; all five tables (`config`, `sessions`, `orders`, `dishes`, `drafting`) must stay in the `supabase_realtime` publication (see the `do $$ ... $$` block in the schema) or a given screen won't live-update.
 - AI menu-image reading (`claude.use("sample")` in the old artifact) is **not ported** — `sample` is `null` in the adapter, so `S.imagesOK` stays false and that UI is disabled. Deferred because it needs a paid server-side Anthropic API call; current workaround is manual text paste / dish library reuse.
+
+**"Đang đặt món" signal (`drafting` table)**
+- While a guest has the cart screen open, the client upserts a `drafting` row `(session_key, doc_id, name, updated_at)` every 30s (`draftingState`/`draftingTimer` in `index.html`) and deletes it on confirm/leave. Only the host sees it (an "Đang đặt món (n)" card with a manual delete button). It stores no dishes/prices — the real draft cart stays in browser memory. Stale rows are filtered client-side by `updated_at`; there is no cron cleanup.
+
+**DB-level input limits**
+- Since RLS is wide open, `supabase-schema.sql` adds length/control-char CHECK constraints on user-entered text (names, shop, account name, notes) as a second line of defence. Postgres CHECK can't contain subqueries, so JSON-shape checks (`guests_shape_ok`, `sets_shape_ok`) are wrapped in IMMUTABLE functions. Constraints are dropped-then-added to stay idempotent. `esc()` at render time is still required — the constraints don't sanitize HTML.
 
 **Session locking**
 - Locking previously used an explicit "Chốt đơn" button; this is gone. Now, when the **host confirms their own order** (not an "on-behalf-of" proxy order) via "Xác nhận đặt món", the app asks for confirmation, then atomically saves the order AND sets `sessions.status = "closed"` in the same action — see `submitCart()`'s `isHostSelf` branch in `index.html`. The host's own "Mở để sửa" button is the only way to reopen (unlocks for everyone, jumps straight into the host's edit form).
@@ -62,6 +69,18 @@ Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) liv
 **QR codes**
 - VietQR payloads are built client-side per the EMVCo spec with manual CRC16 (`vietqr()`, `crc16()` in `index.html`), then rendered via `qrcode-generator@1.4.4` from cdnjs. Deliberately does not use `img.vietqr.io` (blocked historically by the old artifact's CSP; kept client-side for consistency).
 - Bank logos use `api.vietqr.io/img/<CODE>.png` where `<CODE>` is the bank's **letter code** (e.g. `VCB`), not its numeric BIN (`970436`) — requesting by BIN returns a JSON error, not an image. `BANKS` in `index.html` is `[displayName, bin, letterCode]` triples.
+
+## Split bill (`split.html` + `split-schema.sql`)
+
+Standalone page for splitting shared event costs, linked from the root "create" screen of `index.html` ("💸 Chia tiền nhóm"). Same look and helpers as `index.html` (copied in, not shared), but **its own data model and a stricter permission model**:
+
+- One table `split_events` (`data` jsonb = title/bank/people/expenses, `status` jsonb = per-person payment status, `recv` jsonb = per-person refund bank accounts). RLS is enabled with **no policies** and anon has no table grants — every read/write goes through `SECURITY DEFINER` RPCs in `split-schema.sql` (`split_create`, `split_get_manage`, `split_update`, `split_set_status`, `split_set_recv_manage`, `split_delete` for the `?manage=` link; `split_set_phase`; `split_get_view`, `split_guest_expense`, `split_claim`, `split_set_recv` for the `?view=` link). `manage_token` is never returned to view-link holders, and full refund account numbers are only returned to the manage link (view link gets bank name + last 4 digits).
+- Links: `split.html` (create), `split.html?manage=<manage_token>` (host), `split.html?view=<view_token>` (participants pick their name, stored per-event in localStorage `split:me:<token>`).
+- Two phases (`split_events.phase`): **`collect`** (default) — host enters their own expenses, shares the view link, and each participant picks their name and adds/edits/deletes only expenses where they are the payer (RPC `split_guest_expense`, server enforces `payerId = person`, host id rejected, only in `collect`); everyone sees the full expense list but no balances/QR. Host presses "Chốt khoản chi" (`split_set_phase` → `settle`, needs ≥1 expense) to start settlement; "Mở lại" goes back. `split_claim` / `split_set_recv` are refused outside `settle`. Because guests write `data.expenses` concurrently with the host's whole-`data` `split_update`, the host passes `p_base` (= `updated_at` it loaded); on `{conflict:true}` the client merges expenses it hasn't seen (`S.baseIds`) and retries. Known gap: an expense a guest deleted meanwhile is resurrected if the host had it loaded.
+- Settlement goes through the host as a hub: each non-host person's `net = paid − share`; `net < 0` → pays `|net|` to the host's account via VietQR; `net > 0` → host refunds `net` to that person's account (they submit it via the view link, or host enters it). Each expense is split evenly in whole đồng; leftover đồng go to the first participants so shares always sum to the expense amount.
+- Payment status entries store the amount they were set for (`{s, amt}`); the client ignores a status whose `amt` no longer matches the person's current balance, so editing expenses automatically resets stale "paid" marks.
+- No realtime: the manage/view pages poll `split_get_*` every 10s while visible (and pause while editing).
+- Local storage: `split:draft` (unsaved create form), `split:history` (events opened on this browser), and it reuses `comtrua:lastBank` / `comtrua:name` from the lunch app for prefill.
 
 ## Hard constraints / conventions carried over from the Claude Artifact era
 

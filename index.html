@@ -1141,7 +1141,7 @@ function createView(){
   const histCount = live ? 0 : loadHistory().length;
   return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
     <div class="pad">
-      ${!live?`<button class="btn" data-a="go" data-v="history" style="margin-bottom:14px">${I.clock} Lịch sử đơn đã đặt${histCount?` (${histCount})`:""}</button>`:""}
+      ${!live?`<div class="row" style="margin-bottom:14px"><button class="btn" data-a="go" data-v="history">${I.clock} Lịch sử đơn đã đặt${histCount?` (${histCount})`:""}</button><a class="btn" href="./split.html" style="text-decoration:none;color:inherit">💸 Chia tiền nhóm</a></div>`:""}
       <div class="grid" style="display:grid;gap:12px;margin-top:4px">
         <div><label class="f" for="md-host">Tên trưởng nhóm</label><input type="text" id="md-host" data-f="md-host" value="${esc(md.hostName)}" placeholder="VD: Nguyễn" maxlength="40"></div>
         <div><label class="f" for="md-shop">Tên quán (không bắt buộc)</label><input type="text" id="md-shop" data-f="md-shop" value="${esc(md.shopName)}" placeholder="VD: Cơm nhà Út" maxlength="60"></div>
