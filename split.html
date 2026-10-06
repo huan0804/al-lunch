@@ -373,7 +373,7 @@ function viewHtml(){
 /* ---------- Host: nhập liệu ---------- */
 function editView(){
   const ev=S.ev, c=compute(ev), creating=S.mode==="create";
-  const left = creating ? `<a class="icon" href="./" aria-label="Về app cơm trưa">${I.bowl}</a>` : `<button class="icon" data-a="to-result" aria-label="Quay lại">${I.back}</button>`;
+  const left = creating ? `<a class="icon" href="./" aria-label="Về trang chính">${I.bowl}</a>` : `<button class="icon" data-a="to-result" aria-label="Quay lại">${I.back}</button>`;
   const b=ev.bank, known=BANKS.some(x=>x[1]===b.bankBin);
   const bankLine = b.accountNo ? `${esc(b.bankName||"")} ${esc(String(b.accountNo).slice(-4).padStart(8,"•"))}` : `<span class="err">Chưa nhập số tài khoản</span>`;
   const hist = creating ? loadHist() : [];
@@ -447,7 +447,7 @@ function expenseList(mineId){
 function collectView(){
   const ev=S.ev, c=compute(ev), pp=people();
   const none=pp.filter(p=>!ev.expenses.some(e=>e.payerId===p.id));
-  return `<div class="page">${topbar(ev.title, `Đang thu thập khoản chi, ${pp.length} người`, `<a class="icon" href="./" aria-label="Về app cơm trưa">${I.bowl}</a>`, `<button class="pill" style="padding:8px 14px" data-a="share">${I.share} Gửi link</button>`)}
+  return `<div class="page">${topbar(ev.title, `Đang thu thập khoản chi, ${pp.length} người`, `<a class="icon" href="./" aria-label="Về trang chính">${I.bowl}</a>`, `<button class="pill" style="padding:8px 14px" data-a="share">${I.share} Gửi link</button>`)}
   <div class="pad">
     <div class="note">Gửi link cho những người đã chi tiền thay nhóm để họ tự nhập khoản của mình. Khi đủ hết, bấm <b>Chốt khoản chi</b> để bắt đầu chia bill.</div>
     <div class="between" style="margin-top:16px"><h2 class="sec">Khoản chi (${ev.expenses.length})</h2>${ev.expenses.length?`<b class="num">${money(c.total)}</b>`:""}</div>
@@ -465,7 +465,7 @@ function resultView(){
   const owe=c.rows.filter(r=>!r.isHost && r.net<0), get=c.rows.filter(r=>!r.isHost && r.net>0);
   const collected=owe.filter(r=>stOf(r.id,r.net)==="confirmed").reduce((a,r)=>a-r.net,0);
   const refunded=get.filter(r=>stOf(r.id,r.net)==="sent").reduce((a,r)=>a+r.net,0);
-  return `<div class="page">${topbar(ev.title, `${people().length} người, tổng chi ${money(c.total)}`, `<a class="icon" href="./" aria-label="Về app cơm trưa">${I.bowl}</a>`, `<button class="pill" style="padding:8px 14px" data-a="share">${I.share} Gửi link</button>`)}
+  return `<div class="page">${topbar(ev.title, `${people().length} người, tổng chi ${money(c.total)}`, `<a class="icon" href="./" aria-label="Về trang chính">${I.bowl}</a>`, `<button class="pill" style="padding:8px 14px" data-a="share">${I.share} Gửi link</button>`)}
   <div class="pad">
     <div class="stats">
       <div class="stat r"><small>Cần thu về (${owe.length} người)</small><b class="num">${money(c.toCollect-collected)}</b><div class="small muted">Đã nhận ${money(collected)}</div></div>

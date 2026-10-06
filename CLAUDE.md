@@ -34,7 +34,7 @@ There is no build or test command — it's static files.
 
 There is no login and no Supabase Auth. Access is entirely URL-based, via unguessable tokens embedded in the session row:
 
-- **Root link** (`al-lunch.vercel.app`, no query string) — always shows an empty "create new group order" screen. Anyone can open it and create a session.
+- **Root link** (`al-lunch.vercel.app`, no query string) — shows a launcher with two cards: "Đặt cơm trưa" (`S.picked=true` → the empty "create new group order" screen; `#lunch` hash skips the launcher, used by "Đặt đơn nhóm mới") and "Chia tiền nhóm" (link to `split.html`). Anyone can open it and create a session.
 - **Manage link** (`?manage=<manage_token>`) — generated per-session when it's created; the page auto-redirects here after creation. Full control over *that one session only* (edit menu, confirm payments, close/reopen/delete) — does not grant control over any other session.
 - **Order/guest link** (`?order=<order_token>`) — view/order for that one session only, no management rights.
 
@@ -72,7 +72,7 @@ Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) liv
 
 ## Split bill (`split.html` + `split-schema.sql`)
 
-Standalone page for splitting shared event costs, linked from the root "create" screen of `index.html` ("💸 Chia tiền nhóm"). Same look and helpers as `index.html` (copied in, not shared), but **its own data model and a stricter permission model**:
+Standalone page for splitting shared event costs, linked from the root launcher of `index.html` ("💸 Chia tiền nhóm"). Same look and helpers as `index.html` (copied in, not shared), but **its own data model and a stricter permission model**:
 
 - One table `split_events` (`data` jsonb = title/bank/people/expenses, `status` jsonb = per-person payment status, `recv` jsonb = per-person refund bank accounts). RLS is enabled with **no policies** and anon has no table grants — every read/write goes through `SECURITY DEFINER` RPCs in `split-schema.sql` (`split_create`, `split_get_manage`, `split_update`, `split_set_status`, `split_set_recv_manage`, `split_delete` for the `?manage=` link; `split_set_phase`; `split_get_view`, `split_guest_expense`, `split_claim`, `split_set_recv` for the `?view=` link). `manage_token` is never returned to view-link holders, and full refund account numbers are only returned to the manage link (view link gets bank name + last 4 digits).
 - Links: `split.html` (create), `split.html?manage=<manage_token>` (host), `split.html?view=<view_token>` (participants pick their name, stored per-event in localStorage `split:me:<token>`).

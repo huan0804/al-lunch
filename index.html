@@ -196,6 +196,14 @@ details.more summary::-webkit-details-marker{display:none}
 .empty{text-align:center;padding:30px 10px}
 .empty b{display:block;font-size:19px;margin-bottom:4px}
 table{width:100%;border-collapse:collapse}
+.launch{max-width:560px;margin:0 auto;padding:48px 20px 40px}
+.launch h1{font-size:26px;font-weight:800;margin:0 0 4px}
+.launch .sub{color:var(--muted);margin:0 0 24px}
+.lcard{display:flex;align-items:center;gap:16px;width:100%;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);padding:18px;margin-bottom:14px;cursor:pointer;text-align:left;text-decoration:none;color:inherit}
+.lcard:hover{border-color:var(--ink)}
+.lcard .ic{width:56px;height:56px;border-radius:16px;background:var(--brand-soft);display:flex;align-items:center;justify-content:center;font-size:28px;flex:none}
+.lcard b{display:block;font-size:19px;font-weight:700}
+.lcard small{display:block;color:var(--muted);font-size:14px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -300,7 +308,7 @@ const HERO = `<svg viewBox="0 0 260 200" aria-hidden="true">
 const S = {
   db:null, sample:null, uid:null, canEdit:false, isOwner:false, imagesOK:false,
   config:null, cfgLoaded:false, session:null, sessLoaded:false, orders:{}, ordersLoaded:false, dishes:[], recent:[], drafting:{},
-  view:"home", sheet:null, cart:null, md:null, mdRestored:false, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
+  view:"home", picked:location.hash==="#lunch", sheet:null, cart:null, md:null, mdRestored:false, sf:null, ai:null, libQ:"", filter:"all", busy:false, open:{}
 };
 const unitPrice = () => Number(S.session?.pricePerSet || S.config?.pricePerSet || 35000);
 const dishById = id => (S.session?.menu||[]).find(d=>d.id===id);
@@ -752,6 +760,13 @@ function syncDrafting(){
     S.db.clearDrafting(sessionKey, docId).catch(()=>{});
   }
 }
+// Link gốc: màn chọn chức năng (đặt cơm trưa / chia tiền nhóm). Chỉ hiện khi
+// không có ?manage= / ?order=; chọn "Đặt cơm trưa" thì S.picked=true và vào màn tạo đơn như cũ.
+function launcherView(){
+  return `<div class="launch"><h1>Cơm trưa team</h1><p class="sub">Bạn muốn làm gì?</p>
+    <button class="lcard" data-a="pick-lunch"><span class="ic">🍱</span><span><b>Đặt cơm trưa</b><small>Tạo đơn nhóm, mời đồng nghiệp chọn món và thanh toán</small></span></button>
+    <a class="lcard" href="./split.html"><span class="ic">💸</span><span><b>Chia tiền nhóm</b><small>Chia chi phí chung (team building, ăn tối…), ai trả ai nhận lại bao nhiêu</small></span></a></div>`;
+}
 function view(){
   if (!S.db) return `<div class="page"><div class="empty" style="padding-top:60px"><b>Không kết nối được máy chủ</b><p class="muted">Thiếu cấu hình Supabase hoặc mất mạng. Tải lại trang, nếu vẫn lỗi hãy báo trưởng nhóm.</p></div></div>`;
   if (!S.cfgLoaded||!S.sessLoaded||!S.ordersLoaded) return `<div class="page"><div class="boot"><span class="spin"></span><span>Đang tải…</span></div></div>`;
@@ -762,7 +777,7 @@ function view(){
   // Link gốc (không ?manage= hợp lệ, không ?order=) → không có session nào
   // để hiển thị, luôn ở màn "Tạo đơn nhóm mới". Ai mở link gốc cũng tạo
   // được đơn (không cần quyền gì) — xem ghi chú boot()/publishGroup().
-  if (!S.fixedSessKey && !S.session) return createView();
+  if (!S.fixedSessKey && !S.session) return S.picked ? createView() : launcherView();
   if (S.canEdit && S.view==="create") return createView();
   if (S.view==="cart" && S.session) return cartView();
   return homeView();
@@ -1141,7 +1156,7 @@ function createView(){
   const histCount = live ? 0 : loadHistory().length;
   return `<div class="page">${canClose ? topbar(`Đơn hàng nhóm của ${md.hostName||"bạn"}`, md.shopName||fmtDate(todayStr()), "close") : `<div class="topbar"><div class="tt"><b>Đơn hàng nhóm của ${esc(md.hostName||"bạn")}</b><small>${esc(md.shopName||fmtDate(todayStr()))}</small></div></div>`}
     <div class="pad">
-      ${!live?`<div class="row" style="margin-bottom:14px"><button class="btn" data-a="go" data-v="history">${I.clock} Lịch sử đơn đã đặt${histCount?` (${histCount})`:""}</button><a class="btn" href="./split.html" style="text-decoration:none;color:inherit">💸 Chia tiền nhóm</a></div>`:""}
+      ${!live?`<div class="row" style="margin-bottom:14px"><button class="btn" data-a="go" data-v="history">${I.clock} Lịch sử đơn đã đặt${histCount?` (${histCount})`:""}</button><button class="btn" data-a="launcher">← Trang chính</button></div>`:""}
       <div class="grid" style="display:grid;gap:12px;margin-top:4px">
         <div><label class="f" for="md-host">Tên trưởng nhóm</label><input type="text" id="md-host" data-f="md-host" value="${esc(md.hostName)}" placeholder="VD: Nguyễn" maxlength="40"></div>
         <div><label class="f" for="md-shop">Tên quán (không bắt buộc)</label><input type="text" id="md-shop" data-f="md-shop" value="${esc(md.shopName)}" placeholder="VD: Cơm nhà Út" maxlength="60"></div>
@@ -1259,6 +1274,8 @@ async function onClick(e){
   if (S.sheet?.kind==="confirm") return;
   switch(a){
     case "go": go(v); break;
+    case "pick-lunch": S.picked=true; window.scrollTo({top:0}); break;
+    case "launcher": S.picked=false; window.scrollTo({top:0}); break;
     case "hist-open": {
       if (!v) return;
       const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
@@ -1288,7 +1305,7 @@ async function onClick(e){
       // Tạo đơn nhóm KHÁC (session mới, key khác) — không sửa đơn đang mở.
       // Đơn giản nhất và rõ ràng nhất: quay về link gốc để bắt đầu từ đầu.
       const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
-      location.href = base;
+      location.href = base + "#lunch";
       return; }
     case "finish-session": {
       // Nút trên màn "Quản lý đơn nhóm" sau khi đơn đã khoá và host đã copy
@@ -1298,7 +1315,7 @@ async function onClick(e){
       // hành động "xong việc" cuối cùng với đơn này trong phiên làm việc.
       if (!(await ask("Đơn này đã copy gửi quán xong. Bắt đầu đơn mới? Bạn vẫn xem lại đơn này qua Lịch sử đơn đã đặt.", "Bắt đầu đơn mới"))) return;
       const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
-      location.href = base;
+      location.href = base + "#lunch";
       return; }
     case "share": S.sheet={kind:"share"}; break;
     case "sh-close": S.sheet=null; break;
