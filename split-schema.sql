@@ -259,6 +259,8 @@ begin
   if not split_person_exists(r.data, p_person) then raise exception 'unknown person'; end if;
   if not split_valid_bank(p_bank) then raise exception 'invalid bank'; end if;
   if r.phase <> 'settle' then return jsonb_build_object('ok', false, 'reason', case when r.phase = 'done' then 'done' else 'collecting' end); end if;
+  -- người xem đã gửi tài khoản rồi thì không ghi đè được (tránh người khác đổi tài khoản nhận tiền hoàn của mình); chỉ host sửa qua split_set_recv_manage
+  if r.recv ? p_person then return jsonb_build_object('ok', false, 'reason', 'exists'); end if;
   update split_events set recv = recv || jsonb_build_object(p_person, p_bank), updated_at = now() where id = r.id;
   return jsonb_build_object('ok', true);
 end $$;

@@ -473,8 +473,8 @@ function balanceList(c){
   return `<div class="legend"><span>Cần trả thêm</span><span>Nhận lại</span></div>` + c.rows.map(r=>{
     const w=Math.round(Math.abs(r.net)/max*50);
     const cls=r.net<0?"neg":r.net>0?"pos":"zero";
-    const who = S.mode==="view" ? r.name : "Bạn";
-    const txt = r.isHost ? (r.net<0?`Phần của ${S.mode==="view"?r.name:"bạn"} ${money(-r.net)}, trừ vào tiền thu`:r.net>0?`${who} ứng trước ${money(r.net)}`:"Cân bằng")
+    const who = S.mode==="view" ? esc(r.name) : "Bạn";
+    const txt = r.isHost ? (r.net<0?`Phần của ${S.mode==="view"?esc(r.name):"bạn"} ${money(-r.net)}, trừ vào tiền thu`:r.net>0?`${who} ứng trước ${money(r.net)}`:"Cân bằng")
       : r.net<0?`Trả thêm ${money(-r.net)}`:r.net>0?`Nhận lại ${money(r.net)}`:"Không cần trả";
     return `<div class="bal"><div class="top"><b>${esc(displayName(r))}</b><span class="amt num ${cls}">${txt}</span></div>
       <div class="beam" aria-hidden="true">${r.net?`<i class="${cls}" style="width:${w}%"></i>`:""}</div>
@@ -642,7 +642,7 @@ function guestView(){
     const acc=S.recv?.[r.id];
     block = s==="sent" ? `<div class="note ok"><b>${esc(h.name)} đã chuyển lại ${money(r.net)} cho bạn.</b></div>`
       : `<div class="note">Bạn sẽ nhận lại <b class="num">${money(r.net)}</b> từ ${esc(h.name)}.</div>
-         ${acc && !S.recvForm ? `<p class="small">Đã gửi tài khoản <b>${esc(acc.bankName||"")} ••••${esc(acc.last4||"")}</b>. ${esc(h.name)} sẽ quét QR để chuyển cho bạn. <button class="link" data-a="recv-edit" data-v="${esc(r.id)}" style="font-size:14px">Sửa</button></p>`
+         ${acc && !S.recvForm ? `<p class="small">Đã gửi tài khoản <b>${esc(acc.bankName||"")} ••••${esc(acc.last4||"")}</b>. ${esc(h.name)} sẽ quét QR để chuyển cho bạn. Cần đổi tài khoản thì nhờ ${esc(h.name)} sửa giúp.</p>`
            : S.recvForm ? `<h3 style="margin:16px 0 0;font-size:17px">Tài khoản nhận tiền của bạn</h3>${recvFormHtml("gf")}` : `<button class="btn pri" data-a="recv-edit" data-v="${esc(r.id)}" style="margin-top:12px">Gửi số tài khoản để nhận tiền</button>`}`;
   } else block = `<div class="note ok"><b>Bạn không cần trả thêm và cũng không nhận lại.</b></div>`;
   const done = S.phase==="done";
@@ -808,7 +808,7 @@ async function onClick(e){
       S.busy=true; render();
       try{
         if (S.mode==="manage") await rpc("split_set_recv_manage",{p_token:S.token, p_person:f.pid, p_bank:bank});
-        else { const res=await rpc("split_set_recv",{p_token:S.token, p_person:f.pid, p_bank:bank}); if (res?.ok===false){ S.recvForm=null; await load(true); S.busy=false; toast(res.reason==="done"?"Sự kiện đã hoàn tất":"Host chưa chốt khoản chi"); render(); return; } }
+        else { const res=await rpc("split_set_recv",{p_token:S.token, p_person:f.pid, p_bank:bank}); if (res?.ok===false){ S.recvForm=null; await load(true); S.busy=false; toast(res.reason==="done"?"Sự kiện đã hoàn tất":res.reason==="exists"?"Bạn đã gửi tài khoản rồi, nhờ host sửa nếu cần đổi":"Host chưa chốt khoản chi"); render(); return; } }
         S.recvForm=null; await load(true); toast(S.mode==="manage"?"Đã lưu tài khoản":"Đã gửi số tài khoản cho host");
       }catch(err){ console.error(err); toast("Không lưu được tài khoản"); }
       S.busy=false; break; }
