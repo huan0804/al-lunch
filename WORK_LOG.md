@@ -4,6 +4,17 @@ Nhật ký tiến độ theo phiên làm việc. Mới nhất ở trên cùng. X
 
 ---
 
+## 2026-10-15: PWA + kế hoạch phát hành công khai
+
+Yêu cầu: đưa app lên điện thoại như app thật, cuối cùng muốn phát hành công khai cho mọi người, cần cả iOS. User không có Mac và iPhone.
+
+- **Đã làm (commit `1d19cac`, đã deploy):** biến cả `index.html` và `split.html` thành PWA: `manifest.json` (standalone, nền trắng, theme cam `#F7941D`), `icons/` (icon tạm chữ "AL" trắng trên nền cam, thay được bằng logo thật giữ nguyên tên file), `sw.js` (network-first, chỉ xử lý request cùng origin nên Supabase/realtime/CDN không bị ảnh hưởng). Khi sửa code sau này nên tăng `CACHE` trong `sw.js` (`al-lunch-v1` → `v2`).
+- **Đã kiểm tra:** manifest/sw/icon trả 200 trên bản live, trang chủ có thẻ manifest. **Chưa** test cài thật trên Chrome Android / Safari iOS (cần user thử: nút cài đặt, toàn màn hình, link `?manage=`/`?order=` vẫn chạy).
+- **Quyết định về lộ trình:** (1) PWA (xong, miễn phí, iPhone cài qua Safari → Thêm vào Màn hình chính); (2) Google Play bằng TWA/Capacitor ($25, làm được trên Windows; tài khoản cá nhân mới có thể phải closed test ~12 người/14 ngày — cần kiểm tra lại quy định hiện hành); (3) App Store để sau cùng ($99/năm, cần Mac hoặc build cloud, không có iPhone thì test mù, Apple 4.2 dễ từ chối app chỉ bọc web).
+- **Chặn trước khi công khai:** lunch app (`index.html`) vẫn để RLS mở hoàn toàn cho anon key → công khai thì ai cũng sửa/xoá được đơn người khác. Cần chuyển sang RPC `SECURITY DEFINER` như `split.html` (phải viết lại lớp `supabase-adapter.js`), thêm privacy policy, kiểm tra giới hạn gói free Supabase/Vercel. Với app lên store, app-link/deep-link (`assetlinks.json`, `apple-app-site-association`) và việc `localStorage` (uid, lịch sử host) bị xoá trong WebView cũng là rủi ro cần xử lý.
+
+---
+
 ## 2026-10-06: Thêm tính năng Chia tiền nhóm (split bill)
 
 Yêu cầu: host nhập người tham gia một sự kiện, các khoản chi (ai chi, ai tham gia, có nút chọn tất cả), app tính ai phải trả thêm / được nhận lại. Người trả thêm quét QR chuyển vào tài khoản host; người được nhận lại thì host thấy số tiền và xin số tài khoản để chuyển.
