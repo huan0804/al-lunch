@@ -17,6 +17,7 @@ Files:
 - `supabase-config.js` — `window.SUPABASE_URL` / `SUPABASE_ANON_KEY` (anon/publishable key, safe to expose — see security notes in `supabase-schema.sql`) and the share-link origin.
 - `supabase-schema.sql` — full schema, RLS policies, and RPCs. Idempotent (`IF NOT EXISTS` / `CREATE OR REPLACE` throughout) — safe to re-run wholesale in the Supabase SQL Editor after edits.
 - `split.html` + `split-schema.sql` — the standalone "Chia tiền nhóm" (split bill) feature; see the Split bill section below. `split-bill-feature.md` is the original change spec for it (historical).
+- `README.md` — user-facing overview (Vietnamese) of both features; `vercel.json` — security headers only (no build/routing config).
 - `com-trua.html` + `mock-runtime.js` — the **old Claude Artifact version**, kept only as historical reference. `mock-runtime.js` fakes `window.claude.use(...)` and only works against `com-trua.html`, not `index.html`. Not actively maintained; do not edit them expecting user-visible effect.
 
 ## Running / testing locally
@@ -43,7 +44,7 @@ Multiple sessions exist in parallel, each independently owned by whoever created
 Bank account details (`bank_bin`, `bank_name`, `account_no`, `account_name`) live on the **session**, not on `config` — each session creator receives payment into their own account, entered inline when creating the session (autofilled from that browser's `localStorage`, never shows another user's account).
 
 **State & rendering (`index.html`)**
-- All app state lives in a single object `S` (~line 300: `view`, `sheet`, `cart`, `md`, `sf`, `ai`, `libQ`, `filter`, `busy`, `open`, plus Supabase-specific `db`, `uid`, `canEdit`, `isOwner`, `config`, `session`, `orders`, `dishes`, `drafting`).
+- All app state lives in a single object `S` (`const S`, ~line 312: `view`, `sheet`, `cart`, `md`, `sf`, `ai`, `libQ`, `filter`, `busy`, `open`, plus Supabase-specific `db`, `uid`, `canEdit`, `isOwner`, `config`, `session`, `orders`, `dishes`, `drafting`).
 - `render()` redraws the entire `#app` and `#overlay` (bottom-sheet) on every state change, while preserving focus and cursor position of the currently-focused input.
 - Events use delegation via `data-a` (action) and `data-f` (field) attributes — there are no inline `addEventListener` calls scattered through the view functions.
 - `S.cart` is a draft order; it is only written to the db when the user confirms ("Xác nhận đặt món").

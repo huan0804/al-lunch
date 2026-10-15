@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F7941D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AL Lunch">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>AL Lunch</title>
 <meta property="og:title" content="AL Lunch">
 <meta property="og:site_name" content="AL Lunch">
@@ -1538,5 +1544,6 @@ function watchSession(){
   render();
 })();
 </script>
+<script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));</script>
 </body>
 </html>
