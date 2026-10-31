@@ -4,6 +4,19 @@ Nhật ký tiến độ theo phiên làm việc. Mới nhất ở trên cùng. X
 
 ---
 
+## 2026-10-31: RPC SECURITY DEFINER cho "Đặt cơm trưa" (nhánh `rpc-security`, CHƯA deploy)
+
+Việc "Chặn trước khi công khai" của mục 2026-10-15. Bản cũ để RLS mở cho anon key: ai cũng đọc được **cả `manage_token` của mọi đơn** (bảng `sessions` select không điều kiện) và sửa/xoá đơn bất kỳ.
+
+- **Đã làm (trên nhánh, chưa merge/push):** `lunch-rpc-schema.sql` (các hàm `lunch_*` + `upsert_dish` có kiểm tra đầu vào; token xác định session + vai trò `manage`/`order`; guest không đặt `by_host`, không tự "xác nhận" thanh toán, không ghi khi đơn đóng/đã xác nhận; whitelist cột khi sửa session; giới hạn tạo 30 đơn/phút), `lunch-lockdown.sql` (gỡ policy, thu quyền bảng của anon, gỡ bảng khỏi publication realtime), `supabase-adapter.js` viết lại để gọi RPC, `sw.js` CACHE v2, `privacy.html` (bản nháp, còn chỗ **[CẦN ĐIỀN]**). `index.html` không đổi.
+- **Realtime bỏ:** anon hết quyền SELECT nên Realtime không còn đẩy sự kiện; adapter thăm dò `lunch_get_state` mỗi 5 s khi tab đang hiện (30 s cho thư viện món, 60 s cho config). Giới hạn gói free (tra 2026-10-31): Supabase 500 MB DB, 5 GB egress, 200 kết nối realtime đồng thời, 2 triệu tin realtime/tháng, **dự án bị tạm dừng sau 1 tuần không hoạt động** (supabase.com/pricing). Vercel Hobby: 100 GB Fast Data Transfer, 1 triệu CDN request, 100 deploy/ngày, **chỉ dùng phi thương mại/cá nhân** (vercel.com/docs/plans/hobby) — phát hành công khai có thu tiền/quảng cáo cần gói Pro.
+- **Đã kiểm thử (PGlite = Postgres thật chạy trong Node, KHÔNG phải Supabase):** 59 kiểm tra SQL (quyền theo vai trò, whitelist, khoá, chạy lại được, anon bị từ chối trên bảng nhưng vẫn gọi được RPC) và 33 kiểm tra adapter↔DB (3 "trang" link gốc/host/guest: đặt món, xác nhận, drafting, xoá). **Chưa** thử trên Supabase thật, chưa thử `index.html` trên trình duyệt với adapter mới.
+- **Giới hạn còn lại (không có Auth nên không chặn được):** người cầm link đặt món đọc được `doc_id` của người khác cùng đơn nên sửa/huỷ được đơn của họ TRONG CÙNG đơn; `total` do client tính; thư viện món dùng chung, ai cũng thêm được. Chi tiết ở đầu `lunch-rpc-schema.sql`.
+- **Thứ tự triển khai (đừng đảo):** (1) chạy `lunch-rpc-schema.sql` trong SQL Editor (không ảnh hưởng bản đang chạy) → (2) merge nhánh + deploy, thử tạo đơn / đặt món / xác nhận bằng 2 thiết bị → (3) chạy `lunch-lockdown.sql`. Sau bước 3 bản cũ hết chạy. Hoàn tác ở cuối `lunch-lockdown.sql`.
+- **Thay đổi so với mô tả trong CLAUDE.md:** mục "Three-tier link model" nói "no RPC-level auth, RLS wide open" và dặn đừng thêm lại; nhánh này đảo quyết định đó có chủ đích để phát hành công khai. Nếu merge thì sửa CLAUDE.md cho khớp.
+
+---
+
 ## 2026-10-15: PWA + kế hoạch phát hành công khai
 
 Yêu cầu: đưa app lên điện thoại như app thật, cuối cùng muốn phát hành công khai cho mọi người, cần cả iOS. User không có Mac và iPhone.
