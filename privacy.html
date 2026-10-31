@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chính sách quyền riêng tư — AL Lunch</title>
+<!--
+BẢN NHÁP (2026-10-31). Chưa được luật sư duyệt. Trước khi công khai phải:
+1. Điền các chỗ [CẦN ĐIỀN] bên dưới (người vận hành, email liên hệ, vùng đặt máy chủ Supabase).
+2. Mục 5 ("Bảo mật") chỉ đúng SAU KHI migration RPC SECURITY DEFINER cho index.html đã chạy
+   (xem lunch-rpc-schema.sql). Với schema hiện tại (RLS mở cho anon key) mục này KHÔNG đúng:
+   đừng đăng chính sách này khi chưa migrate.
+3. Mục 6 (xoá dữ liệu): hiện chưa có cron dọn dữ liệu cũ; đoạn "tự xoá sau N ngày" chỉ được giữ nếu đã làm.
+-->
+<style>
+  :root{color-scheme:light}
+  body{margin:0;background:#fff;color:#222;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:720px;margin:0 auto;padding:24px 16px 64px}
+  h1{font-size:1.6rem;margin:0 0 4px}
+  h2{font-size:1.15rem;margin:28px 0 6px;color:#F7941D}
+  .muted{color:#666;font-size:.9rem}
+  .todo{background:#fff4e0;border:1px solid #F7941D;border-radius:6px;padding:0 4px}
+  ul{padding-left:20px}
+  a{color:#F7941D}
+</style>
+</head>
+<body>
+<main>
+<h1>Chính sách quyền riêng tư</h1>
+<p class="muted">AL Lunch · cập nhật lần cuối: <span class="todo">[CẦN ĐIỀN: ngày đăng]</span></p>
+
+<p>AL Lunch giúp một nhóm đặt cơm trưa chung, chia tiền và thu tiền (tiền mặt hoặc chuyển khoản VietQR), kèm công cụ chia tiền sự kiện nhóm. Trang này mô tả dữ liệu ứng dụng lưu, lưu ở đâu và bạn xoá bằng cách nào.</p>
+
+<h2>1. Ai vận hành</h2>
+<p>Ứng dụng do <span class="todo">[CẦN ĐIỀN: tên cá nhân/tổ chức vận hành]</span> vận hành. Liên hệ về dữ liệu cá nhân: <span class="todo">[CẦN ĐIỀN: email liên hệ]</span>.</p>
+
+<h2>2. Dữ liệu chúng tôi lưu</h2>
+<p>Ứng dụng <b>không có tài khoản đăng nhập</b>. Chỉ lưu những gì chính người dùng nhập:</p>
+<ul>
+  <li><b>Người tạo đơn (host):</b> tên hiển thị, tên quán, thực đơn, và <b>thông tin tài khoản ngân hàng nhận tiền</b> (ngân hàng, số tài khoản, tên chủ tài khoản) để tạo mã QR và hiển thị cho thành viên chuyển khoản.</li>
+  <li><b>Thành viên đặt món:</b> tên hiển thị, tên người được đặt hộ, món đã chọn, ghi chú cho quán, cách thanh toán và trạng thái thanh toán. Một mã ẩn danh ngẫu nhiên của trình duyệt dùng để nhận biết đơn của bạn.</li>
+  <li><b>Chia tiền nhóm:</b> tên người tham gia, các khoản chi, số tiền; và, nếu bạn là người được nhận lại tiền và tự gửi, tài khoản ngân hàng nhận tiền của bạn.</li>
+  <li><b>Tín hiệu "đang đặt món":</b> tên bạn và thời điểm gần nhất mở giỏ hàng, chỉ để người tạo đơn thấy ai còn đang chọn; không chứa món hay giá.</li>
+</ul>
+<p>Chúng tôi <b>không</b> thu thập email, số điện thoại, vị trí, danh bạ hay dữ liệu thanh toán thẻ, và <b>không bán hay chia sẻ dữ liệu cho mục đích quảng cáo</b>. Ứng dụng không chuyển tiền: việc chuyển khoản diễn ra trong ứng dụng ngân hàng của bạn.</p>
+
+<h2>3. Dữ liệu lưu trên thiết bị của bạn</h2>
+<p>Trình duyệt lưu cục bộ (localStorage) mã ẩn danh, tên và tài khoản ngân hàng bạn đã dùng gần nhất (để điền sẵn), nháp đơn chưa gửi và lịch sử các đơn đã mở trên thiết bị này. Xoá dữ liệu trang web trong trình duyệt là xoá hết phần này; lưu ý nếu xoá, bạn có thể mất đường vào link quản lý đơn đã tạo nếu chưa lưu link đó.</p>
+
+<h2>4. Dịch vụ bên thứ ba</h2>
+<ul>
+  <li><b>Supabase</b> — cơ sở dữ liệu lưu đơn và thông tin ở mục 2. Máy chủ đặt tại <span class="todo">[CẦN ĐIỀN: vùng/region của dự án Supabase]</span>.</li>
+  <li><b>Vercel</b> — lưu và phân phối trang web.</li>
+  <li><b>Google Fonts, cdnjs, jsDelivr</b> — tải phông chữ và thư viện (thư viện tạo mã QR, supabase-js). Các dịch vụ này thấy địa chỉ IP của bạn khi trang tải.</li>
+  <li><b>api.vietqr.io</b> — tải logo ngân hàng; không gửi số tài khoản, chỉ mã chữ của ngân hàng (ví dụ VCB). Mã QR được tạo ngay trên thiết bị của bạn.</li>
+  <li>Khi bạn bấm chia sẻ qua Zalo, Facebook, Teams, bạn rời sang dịch vụ đó và chịu chính sách của họ.</li>
+</ul>
+
+<h2>5. Bảo mật</h2>
+<p>Truy cập đơn dựa trên đường link chứa mã ngẫu nhiên dài: ai có <i>link quản lý</i> thì quản lý được đúng đơn đó, ai có <i>link đặt món</i> thì xem và đặt món trong đúng đơn đó. <b>Hãy coi link như mật khẩu và chỉ gửi cho người trong nhóm.</b> Dữ liệu chỉ truy cập qua các hàm máy chủ kiểm tra mã link; không có đường đọc/ghi trực tiếp vào bảng dữ liệu từ bên ngoài. Do không có đăng nhập, người cầm link đặt món có thể đặt tên giống người khác; đây là đánh đổi để dùng nhanh, không cần tài khoản. Không hệ thống nào an toàn tuyệt đối.</p>
+
+<h2>6. Lưu giữ và xoá dữ liệu</h2>
+<ul>
+  <li>Người tạo đơn có thể xoá đơn bất cứ lúc nào bằng nút "Xoá đơn hàng nhóm"; xoá đơn là xoá luôn các đơn đặt món và tín hiệu "đang đặt" thuộc đơn đó.</li>
+  <li>Thành viên huỷ được đơn của chính mình khi đơn còn mở.</li>
+  <li>Đơn cũ <span class="todo">[CẦN QUYẾT ĐỊNH: giữ vô thời hạn hay tự xoá sau N ngày — hiện chưa có tác vụ tự xoá]</span>.</li>
+  <li>Muốn xoá dữ liệu mà không còn link quản lý, gửi email cho địa chỉ ở mục 1 kèm link đơn (hoặc thông tin để xác định đơn); chúng tôi chỉ xử lý khi xác minh được đơn đó.</li>
+</ul>
+
+<h2>7. Trẻ em</h2>
+<p>Ứng dụng dành cho người đi làm đặt cơm nhóm, không nhắm tới trẻ em dưới 16 tuổi.</p>
+
+<h2>8. Thay đổi chính sách</h2>
+<p>Khi chính sách thay đổi, ngày "cập nhật lần cuối" ở đầu trang sẽ đổi theo.</p>
+</main>
+</body>
+</html>

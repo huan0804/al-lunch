@@ -439,7 +439,7 @@ const curKey = () => S.sessKey;
 // Link gửi cho team: link gốc (ARTIFACT_URL, không query) + ?order=<order_token>
 // của session đang xem — đúng đơn nhóm đó, không có quyền quản lý.
 const shareLink = () => {
-  const base = (S.config?.shareUrl || ARTIFACT_URL).split("?")[0].split("#")[0];
+  const base = ARTIFACT_URL.split("?")[0].split("#")[0];
   return S.session?.orderToken ? `${base}?order=${S.session.orderToken}` : base;
 };
 function setLabel(s){ const ds=s.dishes||[]; return ds.map(d=>d.name).join(" + "); }
@@ -463,7 +463,7 @@ function statusOf(o){
   if (o.payStatus==="claimed") return ["Báo đã chuyển","b-yel"];
   return ["Chưa chuyển","b-red"];
 }
-const hostPaysFor = docId => docId===S.uid && S.isOwner && S.config?.hostPays !== false;
+const hostPaysFor = docId => docId===S.uid && S.isOwner && S.session?.hostPays !== false;
 const hostName = () => S.session?.hostName || "trưởng nhóm";
 
 /* ================= DB ================= */
@@ -568,6 +568,15 @@ function saveLastMenuLocal(shopName, menu){ try{ lsSet("comtrua:lastMenu", JSON.
 // gõ lại mỗi lần, nhưng không bao giờ hiện tài khoản của người khác.
 function lastBankLocal(){ try{ return JSON.parse(lsGet("comtrua:lastBank")||"null"); }catch{ return null; } }
 function saveLastBankLocal(bank){ try{ lsSet("comtrua:lastBank", JSON.stringify(bank)); }catch{} }
+// Cài đặt mặc định CỦA NGƯỜI NÀY trên MÁY NÀY (giá, có tính phần host, có cho team xem thanh toán).
+// Không còn cấu hình chung ghi được bởi mọi host: khi tạo đơn, các giá trị này được GHI VÀO ĐƠN
+// (sessions.price_per_set/host_pays/show_payment_to_team) nên chỉ ảnh hưởng đúng đơn đó.
+function prefsLocal(){
+  let p=null; try{ p=JSON.parse(lsGet("comtrua:prefs")||"null"); }catch{}
+  return { pricePerSet:Number(p?.pricePerSet)>0 ? Number(p.pricePerSet) : Number(S.config?.pricePerSet)||35000,
+           hostPays:p?.hostPays!==false, showPaymentToTeam:p?.showPaymentToTeam!==false };
+}
+function savePrefsLocal(p){ try{ lsSet("comtrua:prefs", JSON.stringify(p)); }catch{} }
 
 // Lịch sử đơn ĐÃ MỞ TRÊN TRÌNH DUYỆT NÀY — không có đăng nhập/danh sách
 // toàn cục (xem "Ba cấp link" trong CLAUDE.md), nên đây là cách duy nhất
@@ -678,7 +687,7 @@ async function publishGroup(){
     const menu=md.items.map(x=>({id:x.id,nameVi:x.nameVi.trim(),price:x.price!=null?Number(x.price):null,category:x.category||null}));
     const bank={ bankBin:md.bankBin, bankName:md.bankName, accountNo:md.accountNo.trim(), accountName:ascii(md.accountName) };
     const fields={ menu, deadlineAt:dAt, deadline:hhmm(dAt), autoClose:md.autoClose, hostName:md.hostName.trim(), shopName:md.shopName.trim(), ...bank };
-    if (isNew) await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:Number(S.config.pricePerSet||35000), createdAt:Date.now(), ...fields });
+    if (isNew){ const pf=prefsLocal(); await S.db.doc("sessions/"+key).set({ date, status:"open", pricePerSet:pf.pricePerSet, hostPays:pf.hostPays, showPaymentToTeam:pf.showPaymentToTeam, createdAt:Date.now(), ...fields }); }
     else await S.db.doc("sessions/"+key).update(fields);
     lsSet("comtrua:name", md.hostName.trim());
     saveLastMenuLocal(md.shopName.trim(), menu);
@@ -692,7 +701,7 @@ async function publishGroup(){
       // tải lại từ đầu nên bất kỳ code nào sau dòng đó sẽ không chạy.
       saveHistoryEntry({ sessionKey:key, date, shopName:md.shopName.trim(), hostName:md.hostName.trim(), role:"host", manageToken, orderToken });
       if (manageToken){
-        const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+        const base=ARTIFACT_URL.split("?")[0].split("#")[0];
         location.href = `${base}?manage=${manageToken}`;
         return; // trang sẽ tải lại với URL mới, không cần render tiếp ở đây
       }
@@ -1027,7 +1036,7 @@ function cartView(){
   // năng "xem ai đang tham gia" tồn tại, cập nhật realtime khi có người
   // đặt thêm — trước đây ẩn hẳn khi others.length===0 khiến guest tưởng
   // không có cách nào thấy người khác.
-  if (host || S.config?.showPaymentToTeam!==false){
+  if (host || S.session?.showPaymentToTeam!==false){
     html += `<div class="band"></div><div class="pad"><h2 class="sec" style="margin-bottom:12px">Thành viên đã đặt (${others.length})</h2>`;
     const shown = host ? filterList(others) : others;
     if (host) html += filterChips();
@@ -1259,14 +1268,14 @@ function bankView(){
   // Chỉ còn cấu hình CHUNG toàn hệ thống (giá mặc định, tuỳ chọn thanh
   // toán, domain). Tài khoản nhận tiền không còn ở đây — mỗi người nhập
   // tài khoản của họ ngay trong màn tạo đơn (xem createView()).
-  if (!S.sf){ const c=S.config||{}; S.sf={pricePerSet:c.pricePerSet||35000,hostPays:c.hostPays!==false,showPaymentToTeam:c.showPaymentToTeam!==false,shareUrl:c.shareUrl||ARTIFACT_URL}; }
+  if (!S.sf){ const p=prefsLocal(); S.sf={pricePerSet:p.pricePerSet,hostPays:p.hostPays,showPaymentToTeam:p.showPaymentToTeam}; }
   const f=S.sf;
-  return `<div class="page">${topbar("Cài đặt chung", "Áp dụng cho mọi đơn nhóm", "back", "", S.bankReturn||"home")}<div class="pad">
+  const here = S.canEdit && S.session;
+  return `<div class="page">${topbar("Cài đặt đơn của tôi", here?"Lưu trên máy này; hai tuỳ chọn bên dưới cũng áp dụng cho đơn đang mở":"Lưu trên máy này, dùng khi bạn tạo đơn mới", "back", "", S.bankReturn||"home")}<div class="pad">
     <label class="f" for="s-price">Giá 1 suất 2 món</label><input type="number" id="s-price" data-f="s-price" min="1000" step="500" value="${esc(f.pricePerSet)}" style="max-width:200px">
     <p class="small muted">1 món và 2 món bằng giá này. Từ 3 món trở lên, mỗi món bằng nửa giá này, làm tròn đến nghìn (35k: 3 món 53k, 4 món 70k). Áp dụng cho đơn nhóm tạo mới. Món có giá riêng (đặt ở màn Thực đơn) dùng giá riêng đó khi chỉ chọn 1 mình món đó.</p>
     <div class="setting"><div class="t"><b>Phần của tôi không cần thanh toán</b><small>Suất của người tạo đơn ghi là Trưởng nhóm</small></div><button class="toggle" role="switch" aria-checked="${f.hostPays}" data-a="s-toggle" data-v="hostPays"></button></div>
     <div class="setting"><div class="t"><b>Cho cả team xem ai đã thanh toán</b><small>Chỉ hiện tên và trạng thái, không hiện món và số tiền</small></div><button class="toggle" role="switch" aria-checked="${f.showPaymentToTeam}" data-a="s-toggle" data-v="showPaymentToTeam"></button></div>
-    <label class="f" for="s-url" style="margin-top:8px">Domain của app (chỉ sửa khi đổi tên miền)</label><input type="text" id="s-url" data-f="s-url" value="${esc(f.shareUrl)}">
     <p class="small muted">Tài khoản nhận tiền không cài đặt ở đây — mỗi lần "Đặt đơn nhóm" bạn nhập tài khoản của mình ngay trong màn đó.</p>
   </div>
   <div class="bottom"><div class="in"><button class="cta" data-a="save-settings" ${S.busy?"disabled":""}>Lưu</button></div></div></div>`;
@@ -1288,7 +1297,7 @@ async function onClick(e){
     case "launcher": S.picked=false; window.scrollTo({top:0}); break;
     case "hist-open": {
       if (!v) return;
-      const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+      const base=ARTIFACT_URL.split("?")[0].split("#")[0];
       location.href = `${base}?${b.dataset.role}=${v}`;
       return; }
     case "hist-del": {
@@ -1314,7 +1323,7 @@ async function onClick(e){
     case "new-group": {
       // Tạo đơn nhóm KHÁC (session mới, key khác) — không sửa đơn đang mở.
       // Đơn giản nhất và rõ ràng nhất: quay về link gốc để bắt đầu từ đầu.
-      const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+      const base=ARTIFACT_URL.split("?")[0].split("#")[0];
       location.href = base + "#lunch";
       return; }
     case "finish-session": {
@@ -1324,7 +1333,7 @@ async function onClick(e){
       // session này, không cần ghi thêm gì); hỏi xác nhận vì đây coi như
       // hành động "xong việc" cuối cùng với đơn này trong phiên làm việc.
       if (!(await ask("Đơn này đã copy gửi quán xong. Bắt đầu đơn mới? Bạn vẫn xem lại đơn này qua Lịch sử đơn đã đặt.", "Bắt đầu đơn mới"))) return;
-      const base=(S.config?.shareUrl||ARTIFACT_URL).split("?")[0].split("#")[0];
+      const base=ARTIFACT_URL.split("?")[0].split("#")[0];
       location.href = base + "#lunch";
       return; }
     case "share": S.sheet={kind:"share"}; break;
@@ -1450,9 +1459,14 @@ async function onClick(e){
     case "save-settings": {
       const f=S.sf;
       S.busy=true; render();
-      // Bỏ query string khỏi link chia sẻ team để không lỡ lưu nhầm ?manage=... vào đó.
-      const cleanShareUrl = ((f.shareUrl||"").trim() || ARTIFACT_URL).split("?")[0].split("#")[0];
-      try{ await S.db.doc("config/main").set({...(clone(S.config)||{}), pricePerSet:Number(f.pricePerSet)||35000, hostPays:f.hostPays, showPaymentToTeam:f.showPaymentToTeam, shareUrl:cleanShareUrl}); toast("Đã lưu"); S.sf=null; S.view=S.bankReturn||"home"; }catch(err){ writeErr(err); }
+      // Lưu mặc định trên MÁY NÀY (dùng cho đơn tạo mới). Nếu đang mở link quản lý của một đơn,
+      // hai tuỳ chọn hiển thị cũng ghi vào ĐÚNG đơn đó; giá không đổi với đơn đã tạo.
+      try{
+        const pf={ pricePerSet:Number(f.pricePerSet)||35000, hostPays:!!f.hostPays, showPaymentToTeam:!!f.showPaymentToTeam };
+        savePrefsLocal(pf);
+        if (S.canEdit && S.session) await S.db.doc("sessions/"+curKey()).update({ hostPays:pf.hostPays, showPaymentToTeam:pf.showPaymentToTeam });
+        toast("Đã lưu"); S.sf=null; S.view=S.bankReturn||"home";
+      }catch(err){ writeErr(err); }
       S.busy=false; break; }
     default: return;
   }
@@ -1477,7 +1491,6 @@ function onInput(e){
     case "md-accname": S.md.accountName=t.value; saveDraftSoon(); return;
     case "md-bin": S.md.bankBin=t.value.trim(); saveDraftSoon(); break;
     case "s-price": S.sf.pricePerSet=t.value; return;
-    case "s-url": S.sf.shareUrl=t.value; return;
     default: return;
   }
   if (f==="c-name") saveDraftSoon();

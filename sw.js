@@ -1,7 +1,7 @@
 // Service worker tối giản: network-first cho file cùng origin, rơi về cache khi mất mạng.
 // Không đụng tới request cross-origin (Supabase, fonts, CDN) nên realtime/RPC không bị ảnh hưởng.
-const CACHE = "al-lunch-v1";
-const SHELL = ["/", "/index.html", "/split.html", "/supabase-adapter.js", "/supabase-config.js", "/manifest.json"];
+const CACHE = "al-lunch-v2";
+const SHELL = ["/", "/index.html", "/split.html", "/supabase-adapter.js", "/supabase-config.js", "/manifest.json", "/privacy.html"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
