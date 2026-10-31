@@ -46,12 +46,10 @@
   const token = manageToken || orderToken || null;
 
   /* ---------- map field: snake_case (DB) <-> camelCase (app) ---------- */
-  const CONFIG_MAP = {
-    pricePerSet:"price_per_set", hostPays:"host_pays", showPaymentToTeam:"show_payment_to_team",
-    shareUrl:"share_url"
-  };
+  // config chỉ đọc (giá mặc định dự phòng). hostPays/showPaymentToTeam nay thuộc TỪNG ĐƠN (SESSION_MAP).
+  const CONFIG_MAP = { pricePerSet:"price_per_set" };
   const SESSION_MAP = {
-    date:"date", status:"status", pricePerSet:"price_per_set", deadlineAt:"deadline_at",
+    date:"date", status:"status", pricePerSet:"price_per_set", hostPays:"host_pays", showPaymentToTeam:"show_payment_to_team", deadlineAt:"deadline_at",
     deadline:"deadline", autoClose:"auto_close", hostName:"host_name", shopName:"shop_name",
     menu:"menu", createdAt:"created_at", orderToken:"order_token", manageToken:"manage_token",
     bankBin:"bank_bin", bankName:"bank_name", accountNo:"account_no", accountName:"account_name"
@@ -154,10 +152,7 @@
         throw new Error("Không rõ collection: " + coll);
       },
       async set(obj){
-        if (coll==="config"){
-          await rpc("lunch_set_config", { p_manage_token: requireManage(), p_patch: toDb(obj, CONFIG_MAP) });
-          configPoller.refresh(); return;
-        }
+        if (coll==="config") throw new Error("config chỉ đọc: cài đặt nằm theo từng đơn");
         if (coll==="sessions"){
           // Chỉ dùng để TẠO session mới (sửa đơn đi qua update()).
           const fields = toDb(obj, SESSION_MAP);
@@ -169,10 +164,7 @@
         throw new Error("set() không hỗ trợ cho " + coll);
       },
       async update(patch){
-        if (coll==="config"){
-          await rpc("lunch_set_config", { p_manage_token: requireManage(), p_patch: toDb(patch, CONFIG_MAP) });
-          configPoller.refresh(); return;
-        }
+        if (coll==="config") throw new Error("config chỉ đọc: cài đặt nằm theo từng đơn");
         if (coll==="sessions"){
           await rpc("lunch_update_session", { p_manage_token: requireManage(), p_patch: toDb(patch, SESSION_MAP) });
           statePoller.refresh(); return;

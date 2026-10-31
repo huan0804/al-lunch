@@ -29,6 +29,21 @@
 
 create extension if not exists pgcrypto;
 
+-- ---------- Cài đặt THEO TỪNG ĐƠN (thay cho cấu hình chung ghi được bởi mọi host) ----------
+-- host_pays / show_payment_to_team trước nằm ở config (1 dòng dùng chung): host nào đổi là đổi
+-- cho mọi đơn của mọi người. Nay mỗi đơn có giá trị riêng. Lần đầu thêm cột: copy giá trị config
+-- hiện tại sang các đơn đang có để hành vi không đổi. share_url không còn dùng (link mời luôn theo
+-- domain của trang). config chỉ còn để đọc; chỉnh giá mặc định bằng SQL Editor nếu cần.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='sessions' and column_name='host_pays') then
+    alter table sessions add column host_pays boolean not null default true;
+    alter table sessions add column show_payment_to_team boolean not null default true;
+    update sessions s set host_pays = c.host_pays, show_payment_to_team = c.show_payment_to_team
+      from config c where c.id = 1;
+  end if;
+end $$;
+
 -- ---------- Hàm nội bộ: xác định session + vai trò từ token ----------
 -- Không cấp cho anon (xem cuối file); chỉ các hàm SECURITY DEFINER bên dưới gọi.
 create or replace function lunch_auth(p_token text)
@@ -113,13 +128,15 @@ begin
   end if;
   ot := encode(gen_random_bytes(12), 'hex');
   mt := encode(gen_random_bytes(12), 'hex');
-  insert into sessions (key, date, status, price_per_set, deadline_at, deadline, auto_close,
+  insert into sessions (key, date, status, price_per_set, host_pays, show_payment_to_team, deadline_at, deadline, auto_close,
                         host_name, shop_name, menu, bank_bin, bank_name, account_no, account_name,
                         order_token, manage_token, created_at)
   values (p_key,
           coalesce((p_fields->>'date')::date, current_date),
           'open',
           coalesce((p_fields->>'price_per_set')::integer, 35000),
+          coalesce((p_fields->>'host_pays')::boolean, true),
+          coalesce((p_fields->>'show_payment_to_team')::boolean, true),
           coalesce((p_fields->>'deadline_at')::bigint, 0),
           p_fields->>'deadline',
           coalesce((p_fields->>'auto_close')::boolean, true),
@@ -150,6 +167,8 @@ begin
     price_per_set = case when p_patch ? 'price_per_set' then (p_patch->>'price_per_set')::integer else price_per_set end,
     deadline_at   = case when p_patch ? 'deadline_at'   then (p_patch->>'deadline_at')::bigint else deadline_at end,
     deadline      = case when p_patch ? 'deadline'      then p_patch->>'deadline' else deadline end,
+    host_pays     = case when p_patch ? 'host_pays' then (p_patch->>'host_pays')::boolean else host_pays end,
+    show_payment_to_team = case when p_patch ? 'show_payment_to_team' then (p_patch->>'show_payment_to_team')::boolean else show_payment_to_team end,
     auto_close    = case when p_patch ? 'auto_close'    then (p_patch->>'auto_close')::boolean else auto_close end,
     host_name     = case when p_patch ? 'host_name'     then p_patch->>'host_name' else host_name end,
     shop_name     = case when p_patch ? 'shop_name'     then p_patch->>'shop_name' else shop_name end,
@@ -244,30 +263,8 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
--- ---------- Cấu hình chung & thư viện món ----------
--- config chỉ gồm giá mặc định/tuỳ chọn hiển thị/domain chia sẻ. Cần token quản lý
--- của một đơn bất kỳ (không còn ghi tuỳ ý bằng anon key).
-create or replace function lunch_set_config(p_manage_token text, p_patch jsonb)
-returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare a record;
-begin
-  select * into a from lunch_auth(p_manage_token);
-  if a.skey is null or a.role <> 'manage' then return jsonb_build_object('ok', false, 'reason', 'forbidden'); end if;
-  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then return jsonb_build_object('ok', false, 'reason', 'bad_fields'); end if;
-  if p_patch ? 'share_url' and (char_length(p_patch->>'share_url') > 200 or (p_patch->>'share_url') !~ '^https?://') then
-    return jsonb_build_object('ok', false, 'reason', 'bad_share_url');
-  end if;
-  insert into config (id) values (1) on conflict (id) do nothing;
-  update config set
-    price_per_set        = case when p_patch ? 'price_per_set' then (p_patch->>'price_per_set')::integer else price_per_set end,
-    host_pays            = case when p_patch ? 'host_pays' then (p_patch->>'host_pays')::boolean else host_pays end,
-    show_payment_to_team = case when p_patch ? 'show_payment_to_team' then (p_patch->>'show_payment_to_team')::boolean else show_payment_to_team end,
-    share_url            = case when p_patch ? 'share_url' then p_patch->>'share_url' else share_url end,
-    updated_at           = now()
-  where id = 1;
-  return jsonb_build_object('ok', true);
-end $$;
-
+-- ---------- Thư viện món ----------
+-- (Không còn hàm ghi cấu hình chung: xem ghi chú đầu file về host_pays/show_payment_to_team.)
 -- upsert_dish: giữ tên cũ để tương thích, thêm kiểm tra đầu vào + trần số món.
 create or replace function upsert_dish(p_id text, p_name_vi text, p_name_en text)
 returns text language plpgsql security definer set search_path = public, pg_temp as $$
@@ -314,7 +311,7 @@ begin
     'lunch_get_order(text,text)', 'lunch_list_dishes()', 'lunch_create_session(text,jsonb)',
     'lunch_update_session(text,jsonb)', 'lunch_delete_session(text)', 'lunch_put_order(text,text,jsonb)',
     'lunch_set_drafting(text,text,text)', 'lunch_clear_drafting(text,text)',
-    'lunch_set_config(text,jsonb)', 'upsert_dish(text,text,text)', 'lunch_delete_dish(text,text)'
+    'upsert_dish(text,text,text)', 'lunch_delete_dish(text,text)'
   ] loop
     execute format('revoke all on function %s from public', f);
     if exists (select 1 from pg_roles where rolname = 'anon') then
