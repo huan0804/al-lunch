@@ -126,8 +126,8 @@ begin
   if exists (select 1 from sessions where key = p_key) then
     return jsonb_build_object('ok', false, 'reason', 'exists');
   end if;
-  ot := encode(gen_random_bytes(12), 'hex');
-  mt := encode(gen_random_bytes(12), 'hex');
+  ot := substr(replace(gen_random_uuid()::text, '-', ''), 1, 24);
+  mt := substr(replace(gen_random_uuid()::text, '-', ''), 1, 24);
   insert into sessions (key, date, status, price_per_set, host_pays, show_payment_to_team, deadline_at, deadline, auto_close,
                         host_name, shop_name, menu, bank_bin, bank_name, account_no, account_name,
                         order_token, manage_token, created_at)
