@@ -4,7 +4,11 @@ Nhật ký tiến độ theo phiên làm việc. Mới nhất ở trên cùng. X
 
 ---
 
-## 2026-10-31: RPC SECURITY DEFINER cho "Đặt cơm trưa" (nhánh `rpc-security`, CHƯA deploy)
+## 2026-10-31: RPC SECURITY DEFINER cho "Đặt cơm trưa" — ĐÃ DEPLOY VÀ KHOÁ BẢNG (18:34 VN)
+
+**Trạng thái cuối ngày:** `lunch-rpc-schema.sql` đã chạy (sau khi sửa lỗi `gen_random_bytes` bên dưới), `main` đã push, người dùng thử 6 bước trên thiết bị thật: ổn; `lunch-lockdown.sql` đã chạy lúc 18:34. Kiểm tra trên production bằng anon key: đọc/ghi thẳng 5 bảng → HTTP 401 (`42501`); tạo đơn → khách đặt món → host xác nhận → xoá đơn qua RPC đều chạy. Lưu ý: 18:33 người dùng lỡ chạy cả đoạn hoàn tác nên bảng mở lại ~1 phút (phát hiện bằng kiểm tra REST, rồi chạy lại lockdown). **Không chạy lại `supabase-schema.sql`** (tạo lại policy mở). Còn lại: điền [CẦN ĐIỀN] trong `privacy.html` + gắn link; test PWA; AI đọc ảnh menu.
+
+(Bên dưới là ghi chép lúc làm trên nhánh.)
 
 Việc "Chặn trước khi công khai" của mục 2026-10-15. Bản cũ để RLS mở cho anon key: ai cũng đọc được **cả `manage_token` của mọi đơn** (bảng `sessions` select không điều kiện) và sửa/xoá đơn bất kỳ.
 
